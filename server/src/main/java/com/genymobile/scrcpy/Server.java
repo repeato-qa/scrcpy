@@ -3,7 +3,6 @@ package com.genymobile.scrcpy;
 import android.graphics.Rect;
 
 import java.io.File;
-import java.io.IOException;
 
 public final class Server {
 
@@ -13,43 +12,10 @@ public final class Server {
         // not instantiable
     }
 
-    private static void scrcpy(Options options) throws IOException {
-        final Device device = new Device(options);
-        boolean tunnelForward = options.isTunnelForward();
-        try (DesktopConnection connection = DesktopConnection.open(device, tunnelForward)) {
-            ScreenEncoder screenEncoder = new ScreenEncoder(options.getSendFrameMeta(), options.getBitRate());
-
-            // asynchronous
-            startEventController(device, connection);
-
-            try {
-                // synchronous
-                screenEncoder.streamScreen(device, connection.getFd());
-            } catch (IOException e) {
-                // this is expected on close
-                Ln.d("Screen streaming stopped");
-            }
-        }
-    }
-
-    private static void startEventController(final Device device, final DesktopConnection connection) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    new EventController(device, connection).control();
-                } catch (IOException e) {
-                    // this is expected on close
-                    Ln.d("Event controller stopped");
-                }
-            }
-        }).start();
-    }
-
     @SuppressWarnings("checkstyle:MagicNumber")
     private static Options createOptions(String... args) {
-        if (args.length != 5) {
-            throw new IllegalArgumentException("Expecting 5 parameters");
+        if (args.length < 5) {
+            throw new IllegalArgumentException("Expecting at least 5 parameters");
         }
 
         Options options = new Options();
@@ -69,6 +35,14 @@ public final class Server {
 
         boolean sendFrameMeta = Boolean.parseBoolean(args[4]);
         options.setSendFrameMeta(sendFrameMeta);
+
+        if (args.length > 6) {
+            throw new IllegalArgumentException("Expecting no more then 6 parameters");
+        }
+
+        if (args.length == 6 && args[5].toLowerCase().equals("web")) {
+            options.setServerType(Options.TYPE_WEB_SOCKET);
+        }
 
         return options;
     }
@@ -108,6 +82,10 @@ public final class Server {
 
         unlinkSelf();
         Options options = createOptions(args);
-        scrcpy(options);
+        if (options.getServerType() == Options.TYPE_LOCAL_SOCKET) {
+            new LocalSocketConnection(options);
+        } else if (options.getServerType() == Options.TYPE_WEB_SOCKET) {
+            new WebSocketConnection(options);
+        }
     }
 }

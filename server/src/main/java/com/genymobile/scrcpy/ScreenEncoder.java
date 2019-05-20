@@ -9,14 +9,12 @@ import android.media.MediaFormat;
 import android.os.IBinder;
 import android.view.Surface;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ScreenEncoder implements Device.RotationListener {
+public class ScreenEncoder implements DesktopConnection.StreamInvalidateListener, Runnable {
 
-    private static final int DEFAULT_FRAME_RATE = 60; // fps
     private static final int DEFAULT_I_FRAME_INTERVAL = 10; // seconds
 
     private static final int REPEAT_FRAME_DELAY = 6; // repeat after 6 frames
@@ -24,84 +22,92 @@ public class ScreenEncoder implements Device.RotationListener {
     private static final int MICROSECONDS_IN_ONE_SECOND = 1_000_000;
     private static final int NO_PTS = -1;
 
-    private final AtomicBoolean rotationChanged = new AtomicBoolean();
+    private final AtomicBoolean streamIsInvalide = new AtomicBoolean();
     private final ByteBuffer headerBuffer = ByteBuffer.allocate(12);
+    private Thread selectorThread;
 
-    private int bitRate;
-    private int frameRate;
-    private int iFrameInterval;
-    private boolean sendFrameMeta;
     private long ptsOrigin;
+    private Device device;
+    private DesktopConnection connection;
+    private Options options;
+    MediaFormat format;
 
-    public ScreenEncoder(boolean sendFrameMeta, int bitRate, int frameRate, int iFrameInterval) {
-        this.sendFrameMeta = sendFrameMeta;
-        this.bitRate = bitRate;
-        this.frameRate = frameRate;
-        this.iFrameInterval = iFrameInterval;
+    public ScreenEncoder(Options options) {
+        this.options = options;
+        updateFormat();
     }
 
-    public ScreenEncoder(boolean sendFrameMeta, int bitRate) {
-        this(sendFrameMeta, bitRate, DEFAULT_FRAME_RATE, DEFAULT_I_FRAME_INTERVAL);
+    private void updateFormat() {
+        format = createFormat(options.getBitRate(), options.getFrameRate(), DEFAULT_I_FRAME_INTERVAL);
+    }
+
+    public void setConnection(DesktopConnection connection) {
+        this.connection = connection;
+    }
+
+    public void setDevice(Device device) {
+        this.device = device;
     }
 
     @Override
-    public void onRotationChanged(int rotation) {
-        rotationChanged.set(true);
+    public void onStreamInvalidate() {
+        streamIsInvalide.set(true);
+        updateFormat();
     }
 
-    public boolean consumeRotationChange() {
-        return rotationChanged.getAndSet(false);
+    public boolean consumeStreamInvalidation() {
+        return streamIsInvalide.getAndSet(false);
     }
 
-    public void streamScreen(Device device, FileDescriptor fd) throws IOException {
-        MediaFormat format = createFormat(bitRate, frameRate, iFrameInterval);
-        device.setRotationListener(this);
+    public boolean isAlive() {
+        return selectorThread != null && selectorThread.isAlive();
+    }
+
+    public void streamScreen() throws IOException {
         boolean alive;
-        try {
-            do {
-                MediaCodec codec = createCodec();
-                IBinder display = createDisplay();
-                Rect contentRect = device.getScreenInfo().getContentRect();
-                Rect videoRect = device.getScreenInfo().getVideoSize().toRect();
-                setSize(format, videoRect.width(), videoRect.height());
-                configure(codec, format);
-                Surface surface = codec.createInputSurface();
-                setDisplaySurface(display, surface, contentRect, videoRect);
-                codec.start();
-                try {
-                    alive = encode(codec, fd);
-                } finally {
-                    codec.stop();
-                    destroyDisplay(display);
-                    codec.release();
-                    surface.release();
-                }
-            } while (alive);
-        } finally {
-            device.setRotationListener(null);
-        }
+        updateFormat();
+        connection.setStreamInvalidateListener(this);
+        do {
+            MediaCodec codec = createCodec();
+            IBinder display = createDisplay();
+            Rect contentRect = device.getScreenInfo().getContentRect();
+            Rect videoRect = device.getScreenInfo().getVideoSize().toRect();
+            setSize(format, videoRect.width(), videoRect.height());
+            configure(codec, format);
+            Surface surface = codec.createInputSurface();
+            setDisplaySurface(display, surface, contentRect, videoRect);
+            codec.start();
+            try {
+                alive = encode(codec);
+            } finally {
+                codec.stop();
+                destroyDisplay(display);
+                codec.release();
+                surface.release();
+            }
+        } while (alive);
     }
 
-    private boolean encode(MediaCodec codec, FileDescriptor fd) throws IOException {
+    private boolean encode(MediaCodec codec) throws IOException {
         boolean eof = false;
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
 
-        while (!consumeRotationChange() && !eof) {
+        while (!consumeStreamInvalidation() && !eof && connection.hasConnections()) {
             int outputBufferId = codec.dequeueOutputBuffer(bufferInfo, -1);
             eof = (bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
             try {
-                if (consumeRotationChange()) {
+                if (consumeStreamInvalidation()) {
                     // must restart encoding with new size
                     break;
                 }
                 if (outputBufferId >= 0) {
                     ByteBuffer codecBuffer = codec.getOutputBuffer(outputBufferId);
 
-                    if (sendFrameMeta) {
-                        writeFrameMeta(fd, bufferInfo, codecBuffer.remaining());
+                    if (options.getSendFrameMeta()) {
+                        writeFrameMeta(bufferInfo, codecBuffer.remaining());
                     }
 
-                    IO.writeFully(fd, codecBuffer);
+                    connection.send(codecBuffer);
                 }
             } finally {
                 if (outputBufferId >= 0) {
@@ -110,10 +116,10 @@ public class ScreenEncoder implements Device.RotationListener {
             }
         }
 
-        return !eof;
+        return !eof && connection.hasConnections();
     }
 
-    private void writeFrameMeta(FileDescriptor fd, MediaCodec.BufferInfo bufferInfo, int packetSize) throws IOException {
+    private void writeFrameMeta(MediaCodec.BufferInfo bufferInfo, int packetSize) throws IOException {
         headerBuffer.clear();
 
         long pts;
@@ -129,14 +135,14 @@ public class ScreenEncoder implements Device.RotationListener {
         headerBuffer.putLong(pts);
         headerBuffer.putInt(packetSize);
         headerBuffer.flip();
-        IO.writeFully(fd, headerBuffer);
+        connection.send(headerBuffer);
     }
 
     private static MediaCodec createCodec() throws IOException {
         return MediaCodec.createEncoderByType("video/avc");
     }
 
-    private static MediaFormat createFormat(int bitRate, int frameRate, int iFrameInterval) throws IOException {
+    private static MediaFormat createFormat(int bitRate, int frameRate, int iFrameInterval) {
         MediaFormat format = new MediaFormat();
         format.setString(MediaFormat.KEY_MIME, "video/avc");
         format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
@@ -174,5 +180,28 @@ public class ScreenEncoder implements Device.RotationListener {
 
     private static void destroyDisplay(IBinder display) {
         SurfaceControl.destroyDisplay(display);
+    }
+
+    @Override
+    public void run() {
+        synchronized (this) {
+            if (selectorThread != null && selectorThread.isAlive()) {
+                throw new IllegalStateException(getClass().getName() + " can only be started once.");
+            }
+            selectorThread = Thread.currentThread();
+        }
+        try {
+            this.streamScreen();
+        } catch (IOException e) {
+            Ln.e("Failed to start screen recorder", e);
+        }
+    }
+
+    public void start(Device device, DesktopConnection connection) {
+        this.device = device;
+        this.connection = connection;
+        if (selectorThread != null && selectorThread.isAlive())
+            throw new IllegalStateException(getClass().getName() + " can only be started once.");
+        new Thread(this).start();
     }
 }

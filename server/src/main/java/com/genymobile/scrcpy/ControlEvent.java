@@ -14,6 +14,7 @@ public final class ControlEvent {
     public static final int COMMAND_BACK_OR_SCREEN_ON = 0;
     public static final int COMMAND_EXPAND_NOTIFICATION_PANEL = 1;
     public static final int COMMAND_COLLAPSE_NOTIFICATION_PANEL = 2;
+    public static final int COMMAND_CHANGE_STREAM_PARAMETERS = 3;
 
     private int type;
     private String text;
@@ -24,6 +25,7 @@ public final class ControlEvent {
     private Position position;
     private int hScroll;
     private int vScroll;
+    private byte[] bytes;
 
     private ControlEvent() {
     }
@@ -62,10 +64,11 @@ public final class ControlEvent {
         return event;
     }
 
-    public static ControlEvent createCommandControlEvent(int action) {
+    public static ControlEvent createCommandControlEvent(int action, byte[] bytes) {
         ControlEvent event = new ControlEvent();
         event.type = TYPE_COMMAND;
         event.action = action;
+        event.bytes = bytes;
         return event;
     }
 
@@ -103,5 +106,9 @@ public final class ControlEvent {
 
     public int getVScroll() {
         return vScroll;
+    }
+
+    public byte[] getBytes() {
+        return bytes;
     }
 }

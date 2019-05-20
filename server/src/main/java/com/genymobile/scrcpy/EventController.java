@@ -28,6 +28,9 @@ public class EventController {
         this.device = device;
         this.connection = connection;
         initPointer();
+
+        // on start, turn screen on
+        turnScreenOn();
     }
 
     private void initPointer() {
@@ -53,17 +56,7 @@ public class EventController {
         coords.setAxisValue(MotionEvent.AXIS_VSCROLL, vScroll);
     }
 
-    public void control() throws IOException {
-        // on start, turn screen on
-        turnScreenOn();
-
-        while (true) {
-            handleEvent();
-        }
-    }
-
-    private void handleEvent() throws IOException {
-        ControlEvent controlEvent = connection.receiveControlEvent();
+    public void handleEvent(ControlEvent controlEvent) {
         switch (controlEvent.getType()) {
             case ControlEvent.TYPE_KEYCODE:
                 injectKeycode(controlEvent.getAction(), controlEvent.getKeycode(), controlEvent.getMetaState());
@@ -78,7 +71,7 @@ public class EventController {
                 injectScroll(controlEvent.getPosition(), controlEvent.getHScroll(), controlEvent.getVScroll());
                 break;
             case ControlEvent.TYPE_COMMAND:
-                executeCommand(controlEvent.getAction());
+                executeCommand(controlEvent.getAction(), controlEvent.getBytes());
                 break;
             default:
                 // do nothing
@@ -168,7 +161,7 @@ public class EventController {
         return injectKeycode(keycode);
     }
 
-    private boolean executeCommand(int action) {
+    private boolean executeCommand(int action, byte[] bytes) {
         switch (action) {
             case ControlEvent.COMMAND_BACK_OR_SCREEN_ON:
                 return pressBackOrTurnScreenOn();
@@ -177,6 +170,9 @@ public class EventController {
                 return true;
             case ControlEvent.COMMAND_COLLAPSE_NOTIFICATION_PANEL:
                 device.collapsePanels();
+                return true;
+            case ControlEvent.COMMAND_CHANGE_STREAM_PARAMETERS:
+                connection.setStreamParameters(bytes);
                 return true;
             default:
                 Ln.w("Unsupported command: " + action);

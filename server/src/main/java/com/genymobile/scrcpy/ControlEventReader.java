@@ -44,6 +44,10 @@ public class ControlEventReader {
     }
 
     public ControlEvent next() {
+        return parseEvent(buffer);
+    }
+
+    public ControlEvent parseEvent(ByteBuffer buffer) {
         if (!buffer.hasRemaining()) {
             return null;
         }
@@ -53,19 +57,19 @@ public class ControlEventReader {
         ControlEvent controlEvent;
         switch (type) {
             case ControlEvent.TYPE_KEYCODE:
-                controlEvent = parseKeycodeControlEvent();
+                controlEvent = parseKeycodeControlEvent(buffer);
                 break;
             case ControlEvent.TYPE_TEXT:
-                controlEvent = parseTextControlEvent();
+                controlEvent = parseTextControlEvent(buffer);
                 break;
             case ControlEvent.TYPE_MOUSE:
-                controlEvent = parseMouseControlEvent();
+                controlEvent = parseMouseControlEvent(buffer);
                 break;
             case ControlEvent.TYPE_SCROLL:
-                controlEvent = parseScrollControlEvent();
+                controlEvent = parseScrollControlEvent(buffer);
                 break;
             case ControlEvent.TYPE_COMMAND:
-                controlEvent = parseCommandControlEvent();
+                controlEvent = parseCommandControlEvent(buffer);
                 break;
             default:
                 Ln.w("Unknown event type: " + type);
@@ -80,7 +84,7 @@ public class ControlEventReader {
         return controlEvent;
     }
 
-    private ControlEvent parseKeycodeControlEvent() {
+    private ControlEvent parseKeycodeControlEvent(ByteBuffer buffer) {
         if (buffer.remaining() < KEYCODE_PAYLOAD_LENGTH) {
             return null;
         }
@@ -90,7 +94,7 @@ public class ControlEventReader {
         return ControlEvent.createKeycodeControlEvent(action, keycode, metaState);
     }
 
-    private ControlEvent parseTextControlEvent() {
+    private ControlEvent parseTextControlEvent(ByteBuffer buffer) {
         if (buffer.remaining() < 1) {
             return null;
         }
@@ -103,7 +107,7 @@ public class ControlEventReader {
         return ControlEvent.createTextControlEvent(text);
     }
 
-    private ControlEvent parseMouseControlEvent() {
+    private ControlEvent parseMouseControlEvent(ByteBuffer buffer) {
         if (buffer.remaining() < MOUSE_PAYLOAD_LENGTH) {
             return null;
         }
@@ -113,7 +117,7 @@ public class ControlEventReader {
         return ControlEvent.createMotionControlEvent(action, buttons, position);
     }
 
-    private ControlEvent parseScrollControlEvent() {
+    private ControlEvent parseScrollControlEvent(ByteBuffer buffer) {
         if (buffer.remaining() < SCROLL_PAYLOAD_LENGTH) {
             return null;
         }
@@ -123,12 +127,17 @@ public class ControlEventReader {
         return ControlEvent.createScrollControlEvent(position, hScroll, vScroll);
     }
 
-    private ControlEvent parseCommandControlEvent() {
+    private ControlEvent parseCommandControlEvent(ByteBuffer buffer) {
         if (buffer.remaining() < COMMAND_PAYLOAD_LENGTH) {
             return null;
         }
         int action = toUnsigned(buffer.get());
-        return ControlEvent.createCommandControlEvent(action);
+        int re = buffer.remaining();
+        byte[] bytes = new byte[re];
+        if (re > 0) {
+            buffer.get(bytes, 0, re);
+        }
+        return ControlEvent.createCommandControlEvent(action, bytes);
     }
 
     private static Position readPosition(ByteBuffer buffer) {

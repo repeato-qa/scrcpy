@@ -1,96 +1,90 @@
 package com.genymobile.scrcpy;
 
-import android.net.LocalServerSocket;
-import android.net.LocalSocket;
-import android.net.LocalSocketAddress;
+import android.graphics.Rect;
 
-import java.io.Closeable;
-import java.io.FileDescriptor;
-import java.io.IOException;
-import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-public final class DesktopConnection implements Closeable {
+public abstract class DesktopConnection implements Device.RotationListener {
+    protected static final int DEVICE_NAME_FIELD_LENGTH = 64;
+    protected StreamInvalidateListener streamInvalidateListener;
+    protected Device device;
+    protected Options options;
+    protected EventController eventController;
+    protected ScreenEncoder screenEncoder;
 
-    private static final int DEVICE_NAME_FIELD_LENGTH = 64;
+    abstract void send(ByteBuffer data);
 
-    private static final String SOCKET_NAME = "scrcpy";
+    abstract void close() throws Exception;
 
-    private final LocalSocket socket;
-    private final InputStream inputStream;
-    private final FileDescriptor fd;
+    abstract boolean hasConnections();
 
-    private final ControlEventReader reader = new ControlEventReader();
-
-    private DesktopConnection(LocalSocket socket) throws IOException {
-        this.socket = socket;
-        inputStream = socket.getInputStream();
-        fd = socket.getFileDescriptor();
-    }
-
-    private static LocalSocket connect(String abstractName) throws IOException {
-        LocalSocket localSocket = new LocalSocket();
-        localSocket.connect(new LocalSocketAddress(abstractName));
-        return localSocket;
-    }
-
-    private static LocalSocket listenAndAccept(String abstractName) throws IOException {
-        LocalServerSocket localServerSocket = new LocalServerSocket(abstractName);
-        try {
-            return localServerSocket.accept();
-        } finally {
-            localServerSocket.close();
-        }
-    }
-
-    public static DesktopConnection open(Device device, boolean tunnelForward) throws IOException {
-        LocalSocket socket;
-        if (tunnelForward) {
-            socket = listenAndAccept(SOCKET_NAME);
-            // send one byte so the client may read() to detect a connection error
-            socket.getOutputStream().write(0);
-        } else {
-            socket = connect(SOCKET_NAME);
-        }
-
-        DesktopConnection connection = new DesktopConnection(socket);
-        Size videoSize = device.getScreenInfo().getVideoSize();
-        connection.send(Device.getDeviceName(), videoSize.getWidth(), videoSize.getHeight());
-        return connection;
-    }
-
-    public void close() throws IOException {
-        socket.shutdownInput();
-        socket.shutdownOutput();
-        socket.close();
+    public DesktopConnection(Options options) {
+        this.options = options;
+        device = new Device(options);
+        device.setRotationListener(this);
+        eventController = new EventController(device, this);
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
-    private void send(String deviceName, int width, int height) throws IOException {
-        byte[] buffer = new byte[DEVICE_NAME_FIELD_LENGTH + 4];
+    protected ByteBuffer getDeviceInfo() {
+        String deviceName = Device.getDeviceName();
+        String magic = "scrcpy";
+        Size videoSize = device.getScreenInfo().getVideoSize();
+        int width = videoSize.getWidth();
+        int height = videoSize.getHeight();
+        int bitRate = options.getBitRate();
+        int frameRate = options.getFrameRate();
+        byte[] buffer = new byte[DEVICE_NAME_FIELD_LENGTH + 9 + magic.length()];
+        ByteBuffer temp = ByteBuffer.wrap(buffer, DEVICE_NAME_FIELD_LENGTH, 9);
+        temp.putShort((short) width);
+        temp.putShort((short) height);
+        temp.putInt(bitRate);
+        temp.put((byte) frameRate);
 
         byte[] deviceNameBytes = deviceName.getBytes(StandardCharsets.UTF_8);
         int len = Math.min(DEVICE_NAME_FIELD_LENGTH - 1, deviceNameBytes.length);
         System.arraycopy(deviceNameBytes, 0, buffer, 0, len);
         // byte[] are always 0-initialized in java, no need to set '\0' explicitly
+        byte[] magicBytes = magic.getBytes(StandardCharsets.UTF_8);
+        System.arraycopy(magicBytes, 0, buffer, DEVICE_NAME_FIELD_LENGTH + 9, magic.length());
 
-        buffer[DEVICE_NAME_FIELD_LENGTH] = (byte) (width >> 8);
-        buffer[DEVICE_NAME_FIELD_LENGTH + 1] = (byte) width;
-        buffer[DEVICE_NAME_FIELD_LENGTH + 2] = (byte) (height >> 8);
-        buffer[DEVICE_NAME_FIELD_LENGTH + 3] = (byte) height;
-        IO.writeFully(fd, buffer, 0, buffer.length);
+        return ByteBuffer.wrap(buffer);
     }
 
-    public FileDescriptor getFd() {
-        return fd;
-    }
-
-    public ControlEvent receiveControlEvent() throws IOException {
-        ControlEvent event = reader.next();
-        while (event == null) {
-            reader.readFrom(inputStream);
-            event = reader.next();
+    public void setStreamParameters(byte[] bytes) {
+        ByteBuffer data = ByteBuffer.wrap(bytes);
+        int w = data.getShort();
+        int h = data.getShort();
+        int bitRate = data.getInt();
+        int frameRate = data.get();
+        Rect contentRect = device.getScreenInfo().getContentRect();
+        int deviceW = contentRect.width();
+        int deviceH = contentRect.height();
+        w = Math.min(w, deviceW);
+        int rH = w * deviceH / deviceW;
+        h = Math.min(h, deviceH);
+        int rW = h * deviceW / deviceH;
+        options.setMaxSize(Math.max(Math.min(rW, w), Math.min(rH, h)));
+        options.setBitRate(bitRate);
+        options.setFrameRate(frameRate);
+        device.setScreenInfo(device.computeScreenInfo(options));
+        if (this.streamInvalidateListener != null) {
+            streamInvalidateListener.onStreamInvalidate();
         }
-        return event;
+    }
+
+    public void setStreamInvalidateListener(StreamInvalidateListener listener) {
+        this.streamInvalidateListener = listener;
+    }
+
+    public interface StreamInvalidateListener {
+        void onStreamInvalidate();
+    }
+
+    public void onRotationChanged(int rotation) {
+        if (this.streamInvalidateListener != null) {
+            streamInvalidateListener.onStreamInvalidate();
+        }
     }
 }

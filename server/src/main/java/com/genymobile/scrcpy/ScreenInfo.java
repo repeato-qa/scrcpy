@@ -28,4 +28,12 @@ public final class ScreenInfo {
         }
         return new ScreenInfo(Device.flipRect(contentRect), videoSize.rotate(), newRotated);
     }
+
+    @Override
+    public String toString() {
+        return "ScreenInfo{contentRect="
+                + contentRect + ", videoSize="
+                + videoSize + ", rotated="
+                + rotated + '}';
+    }
 }

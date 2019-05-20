@@ -21,7 +21,7 @@ public final class Device {
     private RotationListener rotationListener;
 
     public Device(Options options) {
-        screenInfo = computeScreenInfo(options.getCrop(), options.getMaxSize());
+        screenInfo = computeScreenInfo(options);
         registerRotationWatcher(new IRotationWatcher.Stub() {
             @Override
             public void onRotationChanged(int rotation) throws RemoteException {
@@ -39,6 +39,14 @@ public final class Device {
 
     public synchronized ScreenInfo getScreenInfo() {
         return screenInfo;
+    }
+
+    public synchronized void setScreenInfo(ScreenInfo screenInfo) {
+        this.screenInfo = screenInfo;
+    }
+
+    public ScreenInfo computeScreenInfo(Options options) {
+        return computeScreenInfo(options.getCrop(), options.getMaxSize());
     }
 
     private ScreenInfo computeScreenInfo(Rect crop, int maxSize) {

@@ -15,8 +15,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ScreenEncoder implements DesktopConnection.StreamInvalidateListener, Runnable {
 
-    private static final int DEFAULT_I_FRAME_INTERVAL = 10; // seconds
-
     private static final int REPEAT_FRAME_DELAY = 6; // repeat after 6 frames
 
     private static final int MICROSECONDS_IN_ONE_SECOND = 1_000_000;
@@ -29,16 +27,16 @@ public class ScreenEncoder implements DesktopConnection.StreamInvalidateListener
     private long ptsOrigin;
     private Device device;
     private DesktopConnection connection;
-    private Options options;
-    MediaFormat format;
+    private VideoSettings videoSettings;
+    private MediaFormat format;
 
-    public ScreenEncoder(Options options) {
-        this.options = options;
+    public ScreenEncoder(VideoSettings videoSettings) {
+        this.videoSettings = videoSettings;
         updateFormat();
     }
 
     private void updateFormat() {
-        format = createFormat(options.getBitRate(), options.getFrameRate(), DEFAULT_I_FRAME_INTERVAL);
+        format = createFormat(videoSettings.getBitRate(), videoSettings.getFrameRate(), videoSettings.getIFrameInterval());
     }
 
     public void setConnection(DesktopConnection connection) {
@@ -70,8 +68,9 @@ public class ScreenEncoder implements DesktopConnection.StreamInvalidateListener
         do {
             MediaCodec codec = createCodec();
             IBinder display = createDisplay();
-            Rect contentRect = device.getScreenInfo().getContentRect();
-            Rect videoRect = device.getScreenInfo().getVideoSize().toRect();
+            ScreenInfo screenInfo = device.getScreenInfo();
+            Rect contentRect = screenInfo.getContentRect();
+            Rect videoRect = screenInfo.getVideoSize().toRect();
             setSize(format, videoRect.width(), videoRect.height());
             configure(codec, format);
             Surface surface = codec.createInputSurface();
@@ -103,7 +102,7 @@ public class ScreenEncoder implements DesktopConnection.StreamInvalidateListener
                 if (outputBufferId >= 0) {
                     ByteBuffer codecBuffer = codec.getOutputBuffer(outputBufferId);
 
-                    if (options.getSendFrameMeta()) {
+                    if (videoSettings.getSendFrameMeta()) {
                         writeFrameMeta(bufferInfo, codecBuffer.remaining());
                     }
 

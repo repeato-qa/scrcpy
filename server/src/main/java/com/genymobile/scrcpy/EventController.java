@@ -10,8 +10,6 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
-import java.io.IOException;
-
 
 public class EventController {
 
@@ -171,8 +169,8 @@ public class EventController {
             case ControlEvent.COMMAND_COLLAPSE_NOTIFICATION_PANEL:
                 device.collapsePanels();
                 return true;
-            case ControlEvent.COMMAND_CHANGE_STREAM_PARAMETERS:
-                connection.setStreamParameters(bytes);
+            case ControlEvent.COMMAND_SET_VIDEO_SETTINGS:
+                connection.setVideoSettings(bytes);
                 return true;
             default:
                 Ln.w("Unsupported command: " + action);

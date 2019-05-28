@@ -9,7 +9,7 @@ public abstract class DesktopConnection implements Device.RotationListener {
     protected static final int DEVICE_NAME_FIELD_LENGTH = 64;
     protected StreamInvalidateListener streamInvalidateListener;
     protected Device device;
-    protected Options options;
+    protected VideoSettings videoSettings;
     protected EventController eventController;
     protected ScreenEncoder screenEncoder;
 
@@ -19,56 +19,42 @@ public abstract class DesktopConnection implements Device.RotationListener {
 
     abstract boolean hasConnections();
 
-    public DesktopConnection(Options options) {
-        this.options = options;
-        device = new Device(options);
+    protected abstract ByteBuffer getInitialInfo();
+
+    public DesktopConnection(VideoSettings videoSettings) {
+        this.videoSettings = videoSettings;
+        device = new Device(videoSettings);
         device.setRotationListener(this);
         eventController = new EventController(device, this);
     }
 
-    @SuppressWarnings("checkstyle:MagicNumber")
-    protected ByteBuffer getDeviceInfo() {
-        String deviceName = Device.getDeviceName();
-        String magic = "scrcpy";
-        Size videoSize = device.getScreenInfo().getVideoSize();
-        int width = videoSize.getWidth();
-        int height = videoSize.getHeight();
-        int bitRate = options.getBitRate();
-        int frameRate = options.getFrameRate();
-        byte[] buffer = new byte[DEVICE_NAME_FIELD_LENGTH + 9 + magic.length()];
-        ByteBuffer temp = ByteBuffer.wrap(buffer, DEVICE_NAME_FIELD_LENGTH, 9);
-        temp.putShort((short) width);
-        temp.putShort((short) height);
-        temp.putInt(bitRate);
-        temp.put((byte) frameRate);
-
-        byte[] deviceNameBytes = deviceName.getBytes(StandardCharsets.UTF_8);
-        int len = Math.min(DEVICE_NAME_FIELD_LENGTH - 1, deviceNameBytes.length);
-        System.arraycopy(deviceNameBytes, 0, buffer, 0, len);
-        // byte[] are always 0-initialized in java, no need to set '\0' explicitly
-        byte[] magicBytes = magic.getBytes(StandardCharsets.UTF_8);
-        System.arraycopy(magicBytes, 0, buffer, DEVICE_NAME_FIELD_LENGTH + 9, magic.length());
-
-        return ByteBuffer.wrap(buffer);
-    }
-
-    public void setStreamParameters(byte[] bytes) {
+    public void setVideoSettings(byte[] bytes) {
         ByteBuffer data = ByteBuffer.wrap(bytes);
+        int bitRate = data.getInt();
+        byte frameRate = data.get();
+        byte iFrameInterval = data.get();
         int w = data.getShort();
         int h = data.getShort();
-        int bitRate = data.getInt();
-        int frameRate = data.get();
-        Rect contentRect = device.getScreenInfo().getContentRect();
-        int deviceW = contentRect.width();
-        int deviceH = contentRect.height();
-        w = Math.min(w, deviceW);
-        int rH = w * deviceH / deviceW;
-        h = Math.min(h, deviceH);
-        int rW = h * deviceW / deviceH;
-        options.setMaxSize(Math.max(Math.min(rW, w), Math.min(rH, h)));
-        options.setBitRate(bitRate);
-        options.setFrameRate(frameRate);
-        device.setScreenInfo(device.computeScreenInfo(options));
+        int left = data.getShort();
+        int top = data.getShort();
+        int right = data.getShort();
+        int bottom = data.getShort();
+        boolean sendMetaFrame = data.get() != 0;
+        videoSettings.setBitRate(bitRate);
+        videoSettings.setFrameRate(frameRate);
+        videoSettings.setIFrameInterval(iFrameInterval);
+        if (w == 0 && h == 0) {
+            videoSettings.setBounds(null);
+        } else {
+            videoSettings.setBounds(new Size(w, h));
+        }
+        if (left == 0 && right == 0 && top == 0 && bottom == 0) {
+            videoSettings.setCrop(null);
+        } else {
+            videoSettings.setCrop(new Rect(left, top, right, bottom));
+        }
+        videoSettings.setSendFrameMeta(sendMetaFrame);
+        device.setScreenInfo(device.computeScreenInfo(videoSettings));
         if (this.streamInvalidateListener != null) {
             streamInvalidateListener.onStreamInvalidate();
         }

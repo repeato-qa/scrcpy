@@ -13,28 +13,28 @@ public final class Server {
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
-    private static Options createOptions(String... args) {
+    private static void parseArguments(Options options, VideoSettings videoSettings, String... args) {
         if (args.length < 5) {
             throw new IllegalArgumentException("Expecting at least 5 parameters");
         }
 
-        Options options = new Options();
-
         int maxSize = Integer.parseInt(args[0]) & ~7; // multiple of 8
-        options.setMaxSize(maxSize);
+        if (maxSize != 0) {
+            videoSettings.setBounds(new Size(maxSize, maxSize));
+        }
 
         int bitRate = Integer.parseInt(args[1]);
-        options.setBitRate(bitRate);
+        videoSettings.setBitRate(bitRate);
 
         // use "adb forward" instead of "adb tunnel"? (so the server must listen)
         boolean tunnelForward = Boolean.parseBoolean(args[2]);
         options.setTunnelForward(tunnelForward);
 
         Rect crop = parseCrop(args[3]);
-        options.setCrop(crop);
+        videoSettings.setCrop(crop);
 
         boolean sendFrameMeta = Boolean.parseBoolean(args[4]);
-        options.setSendFrameMeta(sendFrameMeta);
+        videoSettings.setSendFrameMeta(sendFrameMeta);
 
         if (args.length > 6) {
             throw new IllegalArgumentException("Expecting no more then 6 parameters");
@@ -43,8 +43,6 @@ public final class Server {
         if (args.length == 6 && args[5].toLowerCase().equals("web")) {
             options.setServerType(Options.TYPE_WEB_SOCKET);
         }
-
-        return options;
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
@@ -81,11 +79,13 @@ public final class Server {
         });
 
         unlinkSelf();
-        Options options = createOptions(args);
+        Options options = new Options();
+        VideoSettings videoSettings = new VideoSettings();
+        parseArguments(options, videoSettings, args);
         if (options.getServerType() == Options.TYPE_LOCAL_SOCKET) {
-            new LocalSocketConnection(options);
+            new LocalSocketConnection(options, videoSettings);
         } else if (options.getServerType() == Options.TYPE_WEB_SOCKET) {
-            new WebSocketConnection(options);
+            new WebSocketConnection(videoSettings);
         }
     }
 }

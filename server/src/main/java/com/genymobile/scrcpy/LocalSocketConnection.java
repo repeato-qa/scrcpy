@@ -8,6 +8,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 public final class LocalSocketConnection extends DesktopConnection {
 
@@ -19,8 +20,8 @@ public final class LocalSocketConnection extends DesktopConnection {
 
     private final ControlEventReader reader = new ControlEventReader();
 
-    public LocalSocketConnection(Options options) throws IOException {
-        super(options);
+    public LocalSocketConnection(Options options, VideoSettings videoSettings) throws IOException {
+        super(videoSettings);
         boolean tunnelForward = options.isTunnelForward();
         if (tunnelForward) {
             socket = listenAndAccept(SOCKET_NAME);
@@ -32,11 +33,33 @@ public final class LocalSocketConnection extends DesktopConnection {
         inputStream = socket.getInputStream();
         fd = socket.getFileDescriptor();
         startEventController();
-        send(getDeviceInfo());
-        screenEncoder = new ScreenEncoder(options);
+        send(getInitialInfo());
+        screenEncoder = new ScreenEncoder(videoSettings);
         screenEncoder.setDevice(device);
         screenEncoder.setConnection(this);
         screenEncoder.run();
+    }
+
+    @SuppressWarnings("checkstyle:MagicNumber")
+    @Override
+    protected ByteBuffer getInitialInfo() {
+        // device name and video size
+        String deviceName = Device.getDeviceName();
+        Size videoSize = device.getScreenInfo().getVideoSize();
+        int width = videoSize.getWidth();
+        int height = videoSize.getHeight();
+        byte[] buffer = new byte[DEVICE_NAME_FIELD_LENGTH + 4];
+
+        byte[] deviceNameBytes = deviceName.getBytes(StandardCharsets.UTF_8);
+        int len = Math.min(DEVICE_NAME_FIELD_LENGTH - 1, deviceNameBytes.length);
+        System.arraycopy(deviceNameBytes, 0, buffer, 0, len);
+        // byte[] are always 0-initialized in java, no need to set '\0' explicitly
+
+        buffer[DEVICE_NAME_FIELD_LENGTH] = (byte) (width >> 8);
+        buffer[DEVICE_NAME_FIELD_LENGTH + 1] = (byte) width;
+        buffer[DEVICE_NAME_FIELD_LENGTH + 2] = (byte) (height >> 8);
+        buffer[DEVICE_NAME_FIELD_LENGTH + 3] = (byte) height;
+        return ByteBuffer.wrap(buffer);
     }
 
     private static LocalSocket connect(String abstractName) throws IOException {

@@ -14,7 +14,7 @@ import java.io.IOException;
 public class Controller {
 
     private final Device device;
-    private final DesktopConnection connection;
+    private final Connection connection;
     private final DeviceMessageSender sender;
 
     private final KeyCharacterMap charMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD);
@@ -23,7 +23,7 @@ public class Controller {
     private final MotionEvent.PointerProperties[] pointerProperties = {new MotionEvent.PointerProperties()};
     private final MotionEvent.PointerCoords[] pointerCoords = {new MotionEvent.PointerCoords()};
 
-    public Controller(Device device, DesktopConnection connection) {
+    public Controller(Device device, Connection connection) {
         this.device = device;
         this.connection = connection;
         initPointer();
@@ -53,33 +53,11 @@ public class Controller {
         coords.setAxisValue(MotionEvent.AXIS_VSCROLL, vScroll);
     }
 
-    @SuppressWarnings("checkstyle:MagicNumber")
-    public void control() throws IOException {
-        // on start, power on the device
-        if (!device.isScreenOn()) {
-            injectKeycode(KeyEvent.KEYCODE_POWER);
-
-            // dirty hack
-            // After POWER is injected, the device is powered on asynchronously.
-            // To turn the device screen off while mirroring, the client will send a message that
-            // would be handled before the device is actually powered on, so its effect would
-            // be "canceled" once the device is turned back on.
-            // Adding this delay prevents to handle the message before the device is actually
-            // powered on.
-            SystemClock.sleep(500);
-        }
-
-        while (true) {
-            handleEvent();
-        }
-    }
-
     public DeviceMessageSender getSender() {
         return sender;
     }
 
-    private void handleEvent() throws IOException {
-        ControlMessage msg = connection.receiveControlMessage();
+    public void handleEvent(ControlMessage msg) {
         switch (msg.getType()) {
             case ControlMessage.TYPE_INJECT_KEYCODE:
                 injectKeycode(msg.getAction(), msg.getKeycode(), msg.getMetaState());
@@ -111,6 +89,9 @@ public class Controller {
                 break;
             case ControlMessage.TYPE_SET_SCREEN_POWER_MODE:
                 device.setScreenPowerMode(msg.getAction());
+                break;
+            case ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS:
+                connection.setVideoSettings(msg.getBytes());
                 break;
             default:
                 // do nothing
@@ -197,5 +178,9 @@ public class Controller {
     private boolean pressBackOrTurnScreenOn() {
         int keycode = device.isScreenOn() ? KeyEvent.KEYCODE_BACK : KeyEvent.KEYCODE_POWER;
         return injectKeycode(keycode);
+    }
+
+    public void turnScreenOn() {
+        injectKeycode(KeyEvent.KEYCODE_POWER);
     }
 }

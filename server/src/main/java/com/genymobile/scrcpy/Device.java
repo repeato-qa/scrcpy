@@ -24,13 +24,13 @@ public final class Device {
     private ScreenInfo screenInfo;
     private RotationListener rotationListener;
 
-    public Device(Options options) {
-        screenInfo = computeScreenInfo(options.getCrop(), options.getMaxSize());
+    public Device(final VideoSettings videoSettings) {
+        screenInfo = computeScreenInfo(videoSettings);
         registerRotationWatcher(new IRotationWatcher.Stub() {
             @Override
             public void onRotationChanged(int rotation) throws RemoteException {
                 synchronized (Device.this) {
-                    screenInfo = screenInfo.withRotation(rotation);
+                    screenInfo = computeScreenInfo(videoSettings);
 
                     // notify
                     if (rotationListener != null) {
@@ -45,7 +45,12 @@ public final class Device {
         return screenInfo;
     }
 
-    private ScreenInfo computeScreenInfo(Rect crop, int maxSize) {
+    public synchronized void setScreenInfo(ScreenInfo screenInfo) {
+        this.screenInfo = screenInfo;
+    }
+
+    public ScreenInfo computeScreenInfo(VideoSettings videoSettings) {
+        Rect crop = videoSettings.getCrop();
         DisplayInfo displayInfo = serviceManager.getDisplayManager().getDisplayInfo();
         boolean rotated = (displayInfo.getRotation() & 1) != 0;
         Size deviceSize = displayInfo.getSize();
@@ -62,7 +67,8 @@ public final class Device {
             }
         }
 
-        Size videoSize = computeVideoSize(contentRect.width(), contentRect.height(), maxSize);
+        Size bounds = videoSettings.getBounds();
+        Size videoSize = computeVideoSize(contentRect.width(), contentRect.height(), bounds);
         return new ScreenInfo(contentRect, videoSize, rotated);
     }
 
@@ -71,31 +77,35 @@ public final class Device {
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
-    private static Size computeVideoSize(int w, int h, int maxSize) {
-        // Compute the video size and the padding of the content inside this video.
-        // Principle:
-        // - scale down the great side of the screen to maxSize (if necessary);
-        // - scale down the other side so that the aspect ratio is preserved;
-        // - round this value to the nearest multiple of 8 (H.264 only accepts multiples of 8)
-        w &= ~7; // in case it's not a multiple of 8
-        h &= ~7;
-        if (maxSize > 0) {
-            if (BuildConfig.DEBUG && maxSize % 8 != 0) {
-                throw new AssertionError("Max size must be a multiple of 8");
-            }
-            boolean portrait = h > w;
-            int major = portrait ? h : w;
-            int minor = portrait ? w : h;
-            if (major > maxSize) {
-                int minorExact = minor * maxSize / major;
-                // +4 to round the value to the nearest multiple of 8
-                minor = (minorExact + 4) & ~7;
-                major = maxSize;
-            }
-            w = portrait ? minor : major;
-            h = portrait ? major : minor;
+    private static Size computeVideoSize(int w, int h, Size bounds) {
+        if (bounds == null) {
+            w &= ~15; // in case it's not a multiple of 16
+            h &= ~15;
+            return new Size(w, h);
         }
-        return new Size(w, h);
+        int boundsWidth = bounds.getWidth();
+        int boundsHeight = bounds.getHeight();
+        int scaledHeight;
+        int scaledWidth;
+        if (boundsWidth > w) {
+            scaledHeight = h;
+        } else {
+            scaledHeight = boundsWidth * h / w;
+        }
+        if (boundsHeight > scaledHeight) {
+            boundsHeight = scaledHeight;
+        }
+        if (boundsHeight == h) {
+            scaledWidth = w;
+        } else {
+            scaledWidth = boundsHeight * w / h;
+        }
+        if (boundsWidth > scaledWidth) {
+            boundsWidth = scaledWidth;
+        }
+        boundsWidth &= ~15;
+        boundsHeight &= ~15;
+        return new Size(boundsWidth, boundsHeight);
     }
 
     public Point getPhysicalPoint(Position position) {

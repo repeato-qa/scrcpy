@@ -16,6 +16,7 @@ public final class ControlMessage {
     public static final int TYPE_SET_CLIPBOARD = 8;
     public static final int TYPE_SET_SCREEN_POWER_MODE = 9;
     public static final int TYPE_ROTATE_DEVICE = 10;
+    public static final int TYPE_CHANGE_STREAM_PARAMETERS = 11;
 
     private int type;
     private String text;
@@ -28,6 +29,7 @@ public final class ControlMessage {
     private Position position;
     private int hScroll;
     private int vScroll;
+    private byte[] bytes;
 
     private ControlMessage() {
     }
@@ -85,6 +87,13 @@ public final class ControlMessage {
         return msg;
     }
 
+    public static ControlMessage createChangeSteamParameters(byte[] bytes) {
+        ControlMessage event = new ControlMessage();
+        event.type = TYPE_CHANGE_STREAM_PARAMETERS;
+        event.bytes = bytes;
+        return event;
+    }
+
     public static ControlMessage createEmpty(int type) {
         ControlMessage msg = new ControlMessage();
         msg.type = type;
@@ -133,5 +142,9 @@ public final class ControlMessage {
 
     public int getVScroll() {
         return vScroll;
+    }
+
+    public byte[] getBytes() {
+        return bytes;
     }
 }

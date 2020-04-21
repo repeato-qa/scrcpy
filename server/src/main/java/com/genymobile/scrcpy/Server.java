@@ -15,60 +15,8 @@ public final class Server {
         // not instantiable
     }
 
-    private static void scrcpy(Options options) throws IOException {
-        Ln.i("Device: " + Build.MANUFACTURER + " " + Build.MODEL + " (Android " + Build.VERSION.RELEASE + ")");
-        final Device device = new Device(options);
-        boolean tunnelForward = options.isTunnelForward();
-        try (DesktopConnection connection = DesktopConnection.open(device, tunnelForward)) {
-            ScreenEncoder screenEncoder = new ScreenEncoder(options.getSendFrameMeta(), options.getBitRate(), options.getMaxFps());
-
-            if (options.getControl()) {
-                Controller controller = new Controller(device, connection);
-
-                // asynchronous
-                startController(controller);
-                startDeviceMessageSender(controller.getSender());
-            }
-
-            try {
-                // synchronous
-                screenEncoder.streamScreen(device, connection.getVideoFd());
-            } catch (IOException e) {
-                // this is expected on close
-                Ln.d("Screen streaming stopped");
-            }
-        }
-    }
-
-    private static void startController(final Controller controller) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    controller.control();
-                } catch (IOException e) {
-                    // this is expected on close
-                    Ln.d("Controller stopped");
-                }
-            }
-        }).start();
-    }
-
-    private static void startDeviceMessageSender(final DeviceMessageSender sender) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    sender.loop();
-                } catch (IOException | InterruptedException e) {
-                    // this is expected on close
-                    Ln.d("Device message sender stopped");
-                }
-            }
-        }).start();
-    }
-
-    private static Options createOptions(String... args) {
+    @SuppressWarnings("checkstyle:MagicNumber")
+    private static void parseArguments(Options options, VideoSettings videoSettings, String... args) {
         if (args.length < 1) {
             throw new IllegalArgumentException("Missing client version");
         }
@@ -79,33 +27,33 @@ public final class Server {
                     "The server version (" + BuildConfig.VERSION_NAME + ") does not match the client " + "(" + clientVersion + ")");
         }
 
-        if (args.length != 10) {
-            throw new IllegalArgumentException("Expecting 10 parameters");
+        if (args.length < 10) {
+            throw new IllegalArgumentException("Expecting at least 6 parameters");
         }
 
-        Options options = new Options();
-
         int maxSize = Integer.parseInt(args[1]) & ~7; // multiple of 8
-        options.setMaxSize(maxSize);
+        if (maxSize != 0) {
+            videoSettings.setMaxSize(maxSize);
+        }
 
         int bitRate = Integer.parseInt(args[2]);
-        options.setBitRate(bitRate);
+        videoSettings.setBitRate(bitRate);
 
         int maxFps = Integer.parseInt(args[3]);
-        options.setMaxFps(maxFps);
+        videoSettings.setMaxFps(maxFps);
 
         int lockedVideoOrientation = Integer.parseInt(args[4]);
-        options.setLockedVideoOrientation(lockedVideoOrientation);
+        videoSettings.setLockedVideoOrientation(lockedVideoOrientation);
 
         // use "adb forward" instead of "adb tunnel"? (so the server must listen)
         boolean tunnelForward = Boolean.parseBoolean(args[5]);
         options.setTunnelForward(tunnelForward);
 
         Rect crop = parseCrop(args[6]);
-        options.setCrop(crop);
+        videoSettings.setCrop(crop);
 
         boolean sendFrameMeta = Boolean.parseBoolean(args[7]);
-        options.setSendFrameMeta(sendFrameMeta);
+        videoSettings.setSendFrameMeta(sendFrameMeta);
 
         boolean control = Boolean.parseBoolean(args[8]);
         options.setControl(control);
@@ -113,7 +61,13 @@ public final class Server {
         int displayId = Integer.parseInt(args[9]);
         options.setDisplayId(displayId);
 
-        return options;
+        if (args.length > 11) {
+            throw new IllegalArgumentException("Expecting no more then 10 parameters");
+        }
+
+        if (args.length == 11 && args[10].toLowerCase().equals("web")) {
+            options.setServerType(Options.TYPE_WEB_SOCKET);
+        }
     }
 
     private static Rect parseCrop(String crop) {
@@ -173,7 +127,13 @@ public final class Server {
         });
 
         unlinkSelf();
-        Options options = createOptions(args);
-        scrcpy(options);
+        Options options = new Options();
+        VideoSettings videoSettings = new VideoSettings();
+        parseArguments(options, videoSettings, args);
+        if (options.getServerType() == Options.TYPE_LOCAL_SOCKET) {
+            new DesktopConnection(options, videoSettings);
+        } else if (options.getServerType() == Options.TYPE_WEB_SOCKET) {
+            new WebSocketConnection(options, videoSettings);
+        }
     }
 }

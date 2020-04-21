@@ -38,9 +38,9 @@ public final class Device {
 
     private final boolean supportsInputEvents;
 
-    public Device(Options options) {
+    public Device(final Options options, final VideoSettings videoSettings) {
         displayId = options.getDisplayId();
-        DisplayInfo displayInfo = serviceManager.getDisplayManager().getDisplayInfo(displayId);
+        final DisplayInfo displayInfo = serviceManager.getDisplayManager().getDisplayInfo(displayId);
         if (displayInfo == null) {
             int[] displayIds = serviceManager.getDisplayManager().getDisplayIds();
             throw new InvalidDisplayIdException(displayId, displayIds);
@@ -48,7 +48,7 @@ public final class Device {
 
         int displayInfoFlags = displayInfo.getFlags();
 
-        screenInfo = ScreenInfo.computeScreenInfo(displayInfo, options.getCrop(), options.getMaxSize(), options.getLockedVideoOrientation());
+        screenInfo = ScreenInfo.computeScreenInfo(displayInfo, videoSettings);
         layerStack = displayInfo.getLayerStack();
 
         registerRotationWatcher(new IRotationWatcher.Stub() {
@@ -82,6 +82,15 @@ public final class Device {
 
     public int getLayerStack() {
         return layerStack;
+    }
+
+    public void applyNewVideoSetting(VideoSettings videoSettings) {
+        final DisplayInfo displayInfo = serviceManager.getDisplayManager().getDisplayInfo(displayId);
+        this.setScreenInfo(ScreenInfo.computeScreenInfo(displayInfo, videoSettings));
+    }
+
+    public synchronized void setScreenInfo(ScreenInfo screenInfo) {
+        this.screenInfo = screenInfo;
     }
 
     public Point getPhysicalPoint(Position position) {

@@ -61,12 +61,18 @@ public final class Server {
         int displayId = Integer.parseInt(args[9]);
         options.setDisplayId(displayId);
 
-        if (args.length > 11) {
-            throw new IllegalArgumentException("Expecting no more then 10 parameters");
+        if (args.length > 12) {
+            throw new IllegalArgumentException("Expecting no more then 11 parameters");
         }
 
-        if (args.length == 11 && args[10].toLowerCase().equals("web")) {
-            options.setServerType(Options.TYPE_WEB_SOCKET);
+        if (args.length > 10) {
+            if (args[10].toLowerCase().equals("web")) {
+                options.setServerType(Options.TYPE_WEB_SOCKET);
+            }
+        }
+        if (args.length > 11) {
+            int portNumber = Integer.parseInt(args[11]);
+            options.setPortNumber(portNumber);
         }
     }
 

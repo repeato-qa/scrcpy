@@ -15,7 +15,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
 
     public WebSocketConnection(Options options, VideoSettings videoSettings) {
         super(options, videoSettings);
-        wsServer = new WSServer(this);
+        wsServer = new WSServer(this, options.getPortNumber());
         wsServer.setReuseAddr(true);
         wsServer.run();
     }

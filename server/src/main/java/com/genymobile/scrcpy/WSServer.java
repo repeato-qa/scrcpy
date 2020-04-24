@@ -23,12 +23,10 @@ public class WSServer extends WebSocketServer {
         void onStart();
     }
 
-    final static private int DEFAULT_PORT_NUMBER = 8886; // 843 flash policy port
-
     private EventsHandler eventsHandler;
 
-    public WSServer(EventsHandler handler) {
-        super(new InetSocketAddress(DEFAULT_PORT_NUMBER));
+    public WSServer(EventsHandler handler, int portNumber) {
+        super(new InetSocketAddress(portNumber));
         eventsHandler = handler;
     }
 

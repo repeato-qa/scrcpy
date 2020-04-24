@@ -19,6 +19,7 @@ public class Options {
     private boolean control;
     private int displayId;
     private int serverType = TYPE_LOCAL_SOCKET;
+    private int portNumber = 8886;
 
     public int getMaxSize() {
         return maxSize;
@@ -108,6 +109,14 @@ public class Options {
         if (type == TYPE_LOCAL_SOCKET || type == TYPE_WEB_SOCKET) {
             this.serverType = type;
         }
+    }
+
+    public void setPortNumber(int portNumber) {
+        this.portNumber = portNumber;
+    }
+
+    public int getPortNumber() {
+        return this.portNumber;
     }
 
     @Override

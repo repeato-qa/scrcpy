@@ -76,7 +76,10 @@ public class ControlMessageReader {
                 msg = parseSetScreenPowerMode(buffer);
                 break;
             case ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS:
-                msg =  parseChangeStreamParameters(buffer);
+                msg = parseChangeStreamParameters(buffer);
+                break;
+            case ControlMessage.TYPE_PUSH_FILE:
+                msg = parsePushFile(buffer);
                 break;
             case ControlMessage.TYPE_BACK_OR_SCREEN_ON:
             case ControlMessage.TYPE_EXPAND_NOTIFICATION_PANEL:
@@ -105,6 +108,15 @@ public class ControlMessageReader {
             buffer.get(bytes, 0, re);
         }
         return ControlMessage.createChangeSteamParameters(bytes);
+    }
+
+    private ControlMessage parsePushFile(ByteBuffer buffer) {
+        int re = buffer.remaining();
+        byte[] bytes = new byte[re];
+        if (re > 0) {
+            buffer.get(bytes, 0, re);
+        }
+        return ControlMessage.createFilePush(bytes);
     }
 
     private ControlMessage parseInjectKeycode(ByteBuffer buffer) {

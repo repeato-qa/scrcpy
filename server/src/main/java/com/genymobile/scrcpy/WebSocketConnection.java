@@ -10,7 +10,7 @@ import java.util.Collection;
 public class WebSocketConnection extends Connection implements WSServer.EventsHandler {
     private WSServer wsServer;
     private int receivingClientsCount = 0;
-    private final byte[] MAGIC_BYTES = "scrcpy".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] MAGIC_BYTES = "scrcpy".getBytes(StandardCharsets.UTF_8);
     private final byte[] DEVICE_NAME_BYTES = Device.getDeviceName().getBytes(StandardCharsets.UTF_8);
 
     public WebSocketConnection(Options options, VideoSettings videoSettings) {
@@ -18,6 +18,13 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         wsServer = new WSServer(this, options.getPortNumber());
         wsServer.setReuseAddr(true);
         wsServer.run();
+    }
+
+    public static ByteBuffer deviceMessageToByteBuffer(DeviceMessage msg) {
+        ByteBuffer buffer = ByteBuffer.wrap(msg.writeToByteArray(MAGIC_BYTES.length));
+        buffer.put(MAGIC_BYTES);
+        buffer.position(0);
+        return buffer;
     }
 
     @Override
@@ -35,9 +42,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     }
 
     public void sendDeviceMessage(DeviceMessage msg) {
-        ByteBuffer buffer = ByteBuffer.wrap(msg.writeToByteArray(MAGIC_BYTES.length));
-        buffer.put(MAGIC_BYTES);
-        buffer.position(0);
+        ByteBuffer buffer = deviceMessageToByteBuffer(msg);
         send(buffer);
     }
 
@@ -101,6 +106,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
         Ln.d("Client has left the room!");
+        FilePushHandler.cancelAllForConnection(conn);
         receivingClientsCount--;
         checkConnectionsCount();
     }
@@ -116,6 +122,10 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         String address = conn.getRemoteSocketAddress().getAddress().getHostAddress();
         ControlMessage controlMessage = reader.parseEvent(message);
         if (controlMessage != null) {
+            if (controlMessage.getType() == ControlMessage.TYPE_PUSH_FILE) {
+                FilePushHandler.handlePush(conn, controlMessage);
+                return;
+            }
             controller.handleEvent(controlMessage);
             if (controlMessage.getType() == ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
                 Boolean streaming = conn.<Boolean>getAttachment();
@@ -139,6 +149,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         Ln.e("WebSocket error", ex);
         if (conn != null) {
             // some errors like port binding failed may not be assignable to a specific websocket
+            FilePushHandler.cancelAllForConnection(conn);
         }
     }
 

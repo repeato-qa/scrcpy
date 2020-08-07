@@ -2,6 +2,8 @@ package com.genymobile.scrcpy;
 
 import android.graphics.Rect;
 
+import java.nio.ByteBuffer;
+
 public final class ScreenInfo {
     /**
      * Device (physical) size, possibly cropped
@@ -80,7 +82,10 @@ public final class ScreenInfo {
         return new ScreenInfo(newContentRect, newUnlockedVideoSize, newDeviceRotation, lockedVideoOrientation);
     }
 
-    public static ScreenInfo computeScreenInfo(DisplayInfo displayInfo, Rect crop, int maxSize, int lockedVideoOrientation) {
+    public static ScreenInfo computeScreenInfo(DisplayInfo displayInfo, VideoSettings videoSettings) {
+        int maxSize = videoSettings.getMaxSize();
+        int lockedVideoOrientation = videoSettings.getLockedVideoOrientation();
+        Rect crop = videoSettings.getCrop();
         int rotation = displayInfo.getRotation();
         Size deviceSize = displayInfo.getSize();
         Rect contentRect = new Rect(0, 0, deviceSize.getWidth(), deviceSize.getHeight());
@@ -105,30 +110,35 @@ public final class ScreenInfo {
     }
 
     private static Size computeVideoSize(int w, int h, int maxSize) {
-        // Compute the video size and the padding of the content inside this video.
-        // Principle:
-        // - scale down the great side of the screen to maxSize (if necessary);
-        // - scale down the other side so that the aspect ratio is preserved;
-        // - round this value to the nearest multiple of 8 (H.264 only accepts multiples of 8)
-        w &= ~7; // in case it's not a multiple of 8
-        h &= ~7;
-        if (maxSize > 0) {
-            if (BuildConfig.DEBUG && maxSize % 8 != 0) {
-                throw new AssertionError("Max size must be a multiple of 8");
-            }
-            boolean portrait = h > w;
-            int major = portrait ? h : w;
-            int minor = portrait ? w : h;
-            if (major > maxSize) {
-                int minorExact = minor * maxSize / major;
-                // +4 to round the value to the nearest multiple of 8
-                minor = (minorExact + 4) & ~7;
-                major = maxSize;
-            }
-            w = portrait ? minor : major;
-            h = portrait ? major : minor;
+        if (maxSize <= 0) {
+            w &= ~15; // in case it's not a multiple of 16
+            h &= ~15;
+            return new Size(w, h);
         }
-        return new Size(w, h);
+
+        int boundsWidth = maxSize;
+        int boundsHeight = maxSize;
+        int scaledHeight;
+        int scaledWidth;
+        if (boundsWidth > w) {
+            scaledHeight = h;
+        } else {
+            scaledHeight = boundsWidth * h / w;
+        }
+        if (boundsHeight > scaledHeight) {
+            boundsHeight = scaledHeight;
+        }
+        if (boundsHeight == h) {
+            scaledWidth = w;
+        } else {
+            scaledWidth = boundsHeight * w / h;
+        }
+        if (boundsWidth > scaledWidth) {
+            boundsWidth = scaledWidth;
+        }
+        boundsWidth &= ~15;
+        boundsHeight &= ~15;
+        return new Size(boundsWidth, boundsHeight);
     }
 
     private static Rect flipRect(Rect crop) {
@@ -159,5 +169,17 @@ public final class ScreenInfo {
             return 0;
         }
         return (lockedVideoOrientation + 4 - deviceRotation) % 4;
+    }
+
+    public byte[] toByteArray() {
+        ByteBuffer temp = ByteBuffer.allocate(4 * 2 + 2 * 2 + 1);
+        temp.putShort((short) contentRect.left);
+        temp.putShort((short) contentRect.top);
+        temp.putShort((short) contentRect.right);
+        temp.putShort((short) contentRect.bottom);
+        temp.putShort((short) unlockedVideoSize.getWidth());
+        temp.putShort((short) unlockedVideoSize.getHeight());
+        temp.put((byte) getVideoRotation());
+        return temp.array();
     }
 }

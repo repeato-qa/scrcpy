@@ -7,6 +7,7 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -91,7 +92,12 @@ public class Controller {
             case ControlMessage.TYPE_GET_CLIPBOARD:
                 String clipboardText = device.getClipboardText();
                 if (clipboardText != null) {
-                    sender.pushClipboardText(clipboardText);
+                    DeviceMessage event = DeviceMessage.createClipboard(clipboardText);
+                    try {
+                        connection.sendDeviceMessage(event);
+                    } catch (IOException e) {
+                        Ln.w("");
+                    }
                 }
                 break;
             case ControlMessage.TYPE_SET_CLIPBOARD:

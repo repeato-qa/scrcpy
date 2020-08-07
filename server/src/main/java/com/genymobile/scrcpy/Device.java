@@ -52,9 +52,9 @@ public final class Device {
 
     private final boolean supportsInputEvents;
 
-    public Device(Options options) {
+    public Device(final Options options, final VideoSettings videoSettings) {
         displayId = options.getDisplayId();
-        DisplayInfo displayInfo = SERVICE_MANAGER.getDisplayManager().getDisplayInfo(displayId);
+        final DisplayInfo displayInfo = SERVICE_MANAGER.getDisplayManager().getDisplayInfo(displayId);
         if (displayInfo == null) {
             int[] displayIds = SERVICE_MANAGER.getDisplayManager().getDisplayIds();
             throw new InvalidDisplayIdException(displayId, displayIds);
@@ -62,14 +62,14 @@ public final class Device {
 
         int displayInfoFlags = displayInfo.getFlags();
 
-        screenInfo = ScreenInfo.computeScreenInfo(displayInfo, options.getCrop(), options.getMaxSize(), options.getLockedVideoOrientation());
+        screenInfo = ScreenInfo.computeScreenInfo(displayInfo, videoSettings);
         layerStack = displayInfo.getLayerStack();
 
         SERVICE_MANAGER.getWindowManager().registerRotationWatcher(new IRotationWatcher.Stub() {
             @Override
             public void onRotationChanged(int rotation) {
                 synchronized (Device.this) {
-                    screenInfo = screenInfo.withDeviceRotation(rotation);
+                    applyNewVideoSetting(videoSettings);
 
                     // notify
                     if (rotationListener != null) {
@@ -122,6 +122,15 @@ public final class Device {
 
     public int getLayerStack() {
         return layerStack;
+    }
+
+    public void applyNewVideoSetting(VideoSettings videoSettings) {
+        final DisplayInfo displayInfo = SERVICE_MANAGER.getDisplayManager().getDisplayInfo(displayId);
+        this.setScreenInfo(ScreenInfo.computeScreenInfo(displayInfo, videoSettings));
+    }
+
+    public synchronized void setScreenInfo(ScreenInfo screenInfo) {
+        this.screenInfo = screenInfo;
     }
 
     public Point getPhysicalPoint(Position position) {

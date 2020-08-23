@@ -7,14 +7,13 @@ import java.util.List;
 
 public class VideoSettings {
     private static final int DEFAULT_BIT_RATE = 8000000;
-    private static final byte DEFAULT_FRAME_RATE = 60;
+    private static final byte DEFAULT_MAX_FPS = 60;
     private static final byte DEFAULT_I_FRAME_INTERVAL = 10; // seconds
 
     private int maxSize;
     private int bitRate = DEFAULT_BIT_RATE;
     private int maxFps;
     private int lockedVideoOrientation;
-    private byte frameRate = DEFAULT_FRAME_RATE;
     private byte iFrameInterval = DEFAULT_I_FRAME_INTERVAL;
     private Rect crop;
     private boolean sendFrameMeta; // send PTS so that the client may record properly
@@ -26,14 +25,6 @@ public class VideoSettings {
 
     public void setBitRate(int bitRate) {
         this.bitRate = bitRate;
-    }
-
-    public int getFrameRate() {
-        return frameRate;
-    }
-
-    public void setFrameRate(byte frameRate) {
-        this.frameRate = frameRate;
     }
 
     public int getIFrameInterval() {
@@ -93,9 +84,9 @@ public class VideoSettings {
     }
 
     public byte[] toByteArray() {
-        ByteBuffer temp = ByteBuffer.allocate(20);
+        ByteBuffer temp = ByteBuffer.allocate(23);
         temp.putInt(bitRate);
-        temp.put(frameRate);
+        temp.putInt(maxFps);
         temp.put(iFrameInterval);
         temp.putInt(maxSize);
         int left = 0;
@@ -121,7 +112,7 @@ public class VideoSettings {
     public String toString() {
         return "VideoSettings{"
                 + "bitRate=" + bitRate + ", "
-                + "frameRate=" + frameRate + ", "
+                + "maxFps=" + maxFps + ", "
                 + "iFrameInterval=" + iFrameInterval + ", "
                 + "maxSize=" + maxSize + ", "
                 + "crop=" + crop + ", "

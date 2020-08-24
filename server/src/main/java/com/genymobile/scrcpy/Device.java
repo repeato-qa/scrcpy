@@ -69,7 +69,7 @@ public final class Device {
             @Override
             public void onRotationChanged(int rotation) {
                 synchronized (Device.this) {
-                    screenInfo = screenInfo.withDeviceRotation(rotation);
+                    applyNewVideoSetting(videoSettings);
 
                     // notify
                     if (rotationListener != null) {

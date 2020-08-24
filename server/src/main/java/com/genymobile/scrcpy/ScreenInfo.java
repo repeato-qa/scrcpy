@@ -83,7 +83,6 @@ public final class ScreenInfo {
     }
 
     public static ScreenInfo computeScreenInfo(DisplayInfo displayInfo, VideoSettings videoSettings) {
-        int maxSize = videoSettings.getMaxSize();
         int lockedVideoOrientation = videoSettings.getLockedVideoOrientation();
         Rect crop = videoSettings.getCrop();
         int rotation = displayInfo.getRotation();
@@ -101,7 +100,8 @@ public final class ScreenInfo {
             }
         }
 
-        Size videoSize = computeVideoSize(contentRect.width(), contentRect.height(), maxSize);
+        Size bounds = videoSettings.getBounds();
+        Size videoSize = computeVideoSize(contentRect.width(), contentRect.height(), bounds);
         return new ScreenInfo(contentRect, videoSize, rotation, lockedVideoOrientation);
     }
 
@@ -109,15 +109,14 @@ public final class ScreenInfo {
         return rect.width() + ":" + rect.height() + ":" + rect.left + ":" + rect.top;
     }
 
-    private static Size computeVideoSize(int w, int h, int maxSize) {
-        if (maxSize <= 0) {
+    private static Size computeVideoSize(int w, int h, Size bounds) {
+        if (bounds == null) {
             w &= ~15; // in case it's not a multiple of 16
             h &= ~15;
             return new Size(w, h);
         }
-
-        int boundsWidth = maxSize;
-        int boundsHeight = maxSize;
+        int boundsWidth = bounds.getWidth();
+        int boundsHeight = bounds.getHeight();
         int scaledHeight;
         int scaledWidth;
         if (boundsWidth > w) {

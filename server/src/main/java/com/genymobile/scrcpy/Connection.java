@@ -76,7 +76,8 @@ public abstract class Connection implements Device.RotationListener {
         int bitRate = data.getInt();
         int maxFps = data.getInt();
         byte iFrameInterval = data.get();
-        int maxSize = data.getInt();
+        int width = data.getShort();
+        int height = data.getShort();
         int left = data.getShort();
         int top = data.getShort();
         int right = data.getShort();
@@ -86,7 +87,7 @@ public abstract class Connection implements Device.RotationListener {
         videoSettings.setBitRate(bitRate);
         videoSettings.setMaxFps(maxFps);
         videoSettings.setIFrameInterval(iFrameInterval);
-        videoSettings.setMaxSize(maxSize);
+        videoSettings.setBounds(width, height);
         if (left == 0 && right == 0 && top == 0 && bottom == 0) {
             videoSettings.setCrop(null);
         } else {

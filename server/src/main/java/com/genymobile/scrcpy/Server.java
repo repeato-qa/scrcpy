@@ -31,9 +31,9 @@ public final class Server {
         Ln.Level level = Ln.Level.valueOf(args[1].toUpperCase(Locale.ENGLISH));
         options.setLogLevel(level);
 
-        int maxSize = Integer.parseInt(args[2]) & ~7; // multiple of 8
+        int maxSize = Integer.parseInt(args[2]);
         if (maxSize != 0) {
-            videoSettings.setMaxSize(maxSize);
+            videoSettings.setBounds(maxSize, maxSize);
         }
 
         int bitRate = Integer.parseInt(args[3]);

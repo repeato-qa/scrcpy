@@ -10,7 +10,7 @@ public class VideoSettings {
     private static final byte DEFAULT_MAX_FPS = 60;
     private static final byte DEFAULT_I_FRAME_INTERVAL = 10; // seconds
 
-    private int maxSize;
+    private Size bounds;
     private int bitRate = DEFAULT_BIT_RATE;
     private int maxFps;
     private int lockedVideoOrientation;
@@ -67,12 +67,16 @@ public class VideoSettings {
         this.lockedVideoOrientation = lockedVideoOrientation;
     }
 
-    public int getMaxSize() {
-        return maxSize;
+    public Size getBounds() {
+        return bounds;
     }
 
-    public void setMaxSize(int maxSize) {
-        this.maxSize = (maxSize / 8) * 8;
+    public void setBounds(Size bounds) {
+        this.bounds = bounds;
+    }
+
+    public void setBounds(int width, int height) {
+        this.bounds = new Size(width  & ~15, height & ~15); // multiple of 16
     }
 
     public List<CodecOption> getCodecOptions() {
@@ -88,7 +92,14 @@ public class VideoSettings {
         temp.putInt(bitRate);
         temp.putInt(maxFps);
         temp.put(iFrameInterval);
-        temp.putInt(maxSize);
+        int width = 0;
+        int height = 0;
+        if (bounds != null) {
+            width = bounds.getWidth();
+            height = bounds.getHeight();
+        }
+        temp.putShort((short) width);
+        temp.putShort((short) height);
         int left = 0;
         int top = 0;
         int right = 0;
@@ -114,7 +125,7 @@ public class VideoSettings {
                 + "bitRate=" + bitRate + ", "
                 + "maxFps=" + maxFps + ", "
                 + "iFrameInterval=" + iFrameInterval + ", "
-                + "maxSize=" + maxSize + ", "
+                + "bounds=" + bounds + ", "
                 + "crop=" + crop + ", "
                 + "metaFrame=" + sendFrameMeta + ", "
                 + "lockedVideoOrientation=" + lockedVideoOrientation

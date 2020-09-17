@@ -142,6 +142,7 @@ public final class ControlMessage {
             case PUSH_STATE_NEW:
             case PUSH_STATE_CANCEL:
             case PUSH_STATE_FINISH:
+                break;
                 // nothing special;
             default:
                 Ln.w("Unknown push event state: " + event.pushState);

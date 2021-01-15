@@ -25,8 +25,18 @@ public final class Server {
                     "The server version (" + BuildConfig.VERSION_NAME + ") does not match the client " + "(" + clientVersion + ")");
         }
 
-        if (args.length < 15) {
-            throw new IllegalArgumentException("Expecting at least 15 parameters");
+        if (args[1].toLowerCase().equals("web")) {
+            options.setServerType(Options.TYPE_WEB_SOCKET);
+            if (args.length > 2) {
+                int portNumber = Integer.parseInt(args[2]);
+                options.setPortNumber(portNumber);
+            }
+            return;
+        }
+
+        final int expectedParameters = 15;
+        if (args.length != expectedParameters) {
+            throw new IllegalArgumentException("Expecting " + expectedParameters + " parameters");
         }
 
         Ln.Level level = Ln.Level.valueOf(args[1].toUpperCase(Locale.ENGLISH));
@@ -72,19 +82,8 @@ public final class Server {
         options.setCodecOptions(codecOptions);
         videoSettings.setCodecOptions(CodecOption.parse(options.getCodecOptions()));
 
-        if (args.length > 16) {
-            throw new IllegalArgumentException("Expecting no more then 16 parameters");
-        }
-
-        if (args.length > 14) {
-            if (args[14].toLowerCase().equals("web")) {
-                options.setServerType(Options.TYPE_WEB_SOCKET);
-            }
-        }
-        if (args.length > 15) {
-            int portNumber = Integer.parseInt(args[15]);
-            options.setPortNumber(portNumber);
-        }
+        String encoderName = "-".equals(args[14]) ? null : args[14];
+        options.setEncoderName(encoderName);
     }
 
     private static Rect parseCrop(String crop) {

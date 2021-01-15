@@ -6,7 +6,7 @@ public class Options {
     public static final int TYPE_LOCAL_SOCKET = 1;
     public static final int TYPE_WEB_SOCKET = 2;
 
-    private Ln.Level logLevel;
+    private Ln.Level logLevel = Ln.Level.ERROR;
     private int maxSize;
     private int bitRate;
     private int maxFps;

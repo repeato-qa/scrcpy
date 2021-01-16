@@ -5,6 +5,7 @@ import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
@@ -234,6 +235,9 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         if (conn != null) {
             // some errors like port binding failed may not be assignable to a specific websocket
             FilePushHandler.cancelAllForConnection(conn);
+        }
+        if (ex instanceof BindException) {
+            System.exit(1);
         }
     }
 

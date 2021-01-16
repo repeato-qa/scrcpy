@@ -6,6 +6,8 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.BindException;
 import java.nio.ByteBuffer;
@@ -21,9 +23,11 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     private static final byte[] MAGIC_BYTES_INITIAL = "scrcpy_initial".getBytes(StandardCharsets.UTF_8);
     private static final byte[] MAGIC_BYTES_MESSAGE = "scrcpy_message".getBytes(StandardCharsets.UTF_8);
     private static final byte[] DEVICE_NAME_BYTES = Device.getDeviceName().getBytes(StandardCharsets.UTF_8);
+    private static final String PID_FILE_PATH = "/data/local/tmp/ws_scrcpy.pid";
 
     public WebSocketConnection(Options options, VideoSettings videoSettings) throws IOException {
         super(options, videoSettings);
+        unlinkPidFile();
         wsServer = new WSServer(this, options.getPortNumber());
         wsServer.setReuseAddr(true);
         wsServer.run();
@@ -39,6 +43,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
             this.isReceiving = isReceiving;
             INSTANCES_BY_ID.add(id);
         }
+
         public static short getNextClientId() {
             short nextClientId = 0;
             while (INSTANCES_BY_ID.contains(++nextClientId)) {
@@ -60,6 +65,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         public void setIsReceiving(boolean isReceiving) {
             this.isReceiving = isReceiving;
         }
+
         public void release() {
             INSTANCES_BY_ID.remove(id);
         }
@@ -167,6 +173,28 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         return full;
     }
 
+    private static void unlinkPidFile() {
+        try {
+            File pidFile = new File(WebSocketConnection.PID_FILE_PATH);
+            if (pidFile.exists()) {
+                pidFile.delete();
+            }
+        } catch (Exception e) {
+            Ln.e("Could not unlink server", e);
+        }
+    }
+
+    private static void writePidFile() {
+        File file = new File(PID_FILE_PATH);
+        FileOutputStream stream;
+        try {
+            stream = new FileOutputStream(file, false);
+            stream.write(Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            Ln.e(e.getMessage());
+        }
+    }
+
     private void checkConnectionsCount() {
         if (receivingClientsCount == 0) {
             Ln.d("No receiving clients.");
@@ -266,6 +294,7 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
         Ln.d("Server started!");
         wsServer.setConnectionLostTimeout(0);
         wsServer.setConnectionLostTimeout(100);
+        writePidFile();
     }
 
     public void onRotationChanged(int rotation) {

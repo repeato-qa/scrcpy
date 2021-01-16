@@ -1,5 +1,7 @@
 package com.genymobile.scrcpy;
 
+import android.media.MediaCodecInfo;
+
 import org.java_websocket.WebSocket;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
@@ -8,13 +10,16 @@ import java.io.IOException;
 import java.net.BindException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 
 public class WebSocketConnection extends Connection implements WSServer.EventsHandler {
     private WSServer wsServer;
     private short receivingClientsCount = 0;
-    private static final byte[] MAGIC_BYTES = "scrcpy".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] MAGIC_BYTES_INITIAL = "scrcpy_initial".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] MAGIC_BYTES_MESSAGE = "scrcpy_message".getBytes(StandardCharsets.UTF_8);
     private static final byte[] DEVICE_NAME_BYTES = Device.getDeviceName().getBytes(StandardCharsets.UTF_8);
 
     public WebSocketConnection(Options options, VideoSettings videoSettings) throws IOException {
@@ -61,8 +66,8 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     }
 
     public static ByteBuffer deviceMessageToByteBuffer(DeviceMessage msg) {
-        ByteBuffer buffer = ByteBuffer.wrap(msg.writeToByteArray(MAGIC_BYTES.length));
-        buffer.put(MAGIC_BYTES);
+        ByteBuffer buffer = ByteBuffer.wrap(msg.writeToByteArray(MAGIC_BYTES_MESSAGE.length));
+        buffer.put(MAGIC_BYTES_MESSAGE);
         buffer.position(0);
         return buffer;
     }
@@ -124,27 +129,42 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     protected ByteBuffer getInitialInfo(short clientId, short clientsCount) {
         byte[] screenInfoBytes = device.getScreenInfo().toByteArray();
         byte[] videoSettingsBytes = videoSettings.toByteArray();
+        int magicBytesLength = MAGIC_BYTES_INITIAL.length;
 
-        byte[] fullInfo = new byte[
-                MAGIC_BYTES.length
+        int baseLength = magicBytesLength
                 + DEVICE_NAME_FIELD_LENGTH
                 + screenInfoBytes.length
                 + videoSettingsBytes.length
-                + 2  // short clientId
-                + 2  // short clientsCount
-        ];
-        System.arraycopy(MAGIC_BYTES, 0, fullInfo, 0, MAGIC_BYTES.length);
+                + 2   // short clientId
+                + 2;  // short clientsCount
+        int additionalLength = 0;
+        MediaCodecInfo[] encoders = ScreenEncoder.listEncoders();
+        List<byte[]> encodersNames = new ArrayList<>();
+        if (encoders != null && encoders.length > 0) {
+            additionalLength += 4;
+            for (MediaCodecInfo encoder : encoders) {
+                byte[] nameBytes = encoder.getName().getBytes(StandardCharsets.UTF_8);
+                additionalLength += 4 + nameBytes.length;
+                encodersNames.add(nameBytes);
+            }
+        }
+        byte[] fullInfo = new byte[baseLength + additionalLength];
+        System.arraycopy(MAGIC_BYTES_INITIAL, 0, fullInfo, 0, magicBytesLength);
         int len = Math.min(DEVICE_NAME_FIELD_LENGTH - 1, DEVICE_NAME_BYTES.length);
-        System.arraycopy(DEVICE_NAME_BYTES, 0, fullInfo, MAGIC_BYTES.length, len);
+        System.arraycopy(DEVICE_NAME_BYTES, 0, fullInfo, magicBytesLength, len);
         ByteBuffer full = ByteBuffer.wrap(fullInfo);
-        full.position(MAGIC_BYTES.length + len);
-        ByteBuffer temp = ByteBuffer.wrap(fullInfo, MAGIC_BYTES.length + DEVICE_NAME_FIELD_LENGTH,
-                screenInfoBytes.length + videoSettingsBytes.length + 2 + 2);
-        temp.put(screenInfoBytes);
-        temp.put(videoSettingsBytes);
-        temp.putShort(clientId);
-        temp.putShort(clientsCount);
-        return ByteBuffer.wrap(fullInfo);
+        full.position(magicBytesLength + DEVICE_NAME_FIELD_LENGTH);
+        full.put(screenInfoBytes);
+        full.put(videoSettingsBytes);
+        full.putShort(clientId);
+        full.putShort(clientsCount);
+        full.putInt(encodersNames.size());
+        for (byte[] encoderNameBytes: encodersNames) {
+            full.putInt(encoderNameBytes.length);
+            full.put(encoderNameBytes);
+        }
+        full.rewind();
+        return full;
     }
 
     private void checkConnectionsCount() {

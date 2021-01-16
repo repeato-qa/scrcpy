@@ -11,13 +11,13 @@ public class Options {
     private int bitRate;
     private int maxFps;
     private int lockedVideoOrientation;
-    private boolean tunnelForward;
+    private boolean tunnelForward = false;
     private Rect crop;
     private boolean sendFrameMeta; // send PTS so that the client may record properly
-    private boolean control;
+    private boolean control = true;
     private int displayId;
-    private boolean showTouches;
-    private boolean stayAwake;
+    private boolean showTouches = false;
+    private boolean stayAwake = false;
     private String codecOptions;
     private String encoderName;
     private int serverType = TYPE_LOCAL_SOCKET;

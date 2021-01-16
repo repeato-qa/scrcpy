@@ -3,6 +3,7 @@ package com.genymobile.scrcpy;
 import android.graphics.Rect;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class VideoSettings {
@@ -17,6 +18,7 @@ public class VideoSettings {
     private byte iFrameInterval = DEFAULT_I_FRAME_INTERVAL;
     private Rect crop;
     private boolean sendFrameMeta; // send PTS so that the client may record properly
+    private String codecOptionsString;
     private List<CodecOption> codecOptions;
     private String encoderName;
 
@@ -84,8 +86,11 @@ public class VideoSettings {
         return codecOptions;
     }
 
-    public void setCodecOptions(List<CodecOption> codecOptions) {
-        this.codecOptions = codecOptions;
+    public void setCodecOptions(String codecOptionsString) {
+        this.codecOptions = CodecOption.parse(codecOptionsString);
+        if (codecOptionsString.equals("-")) {
+            this.codecOptionsString = null;
+        }
     }
 
     public String getEncoderName() {
@@ -93,11 +98,28 @@ public class VideoSettings {
     }
 
     public void setEncoderName(String encoderName) {
-        this.encoderName = encoderName;
+        if (encoderName != null && encoderName.equals("-")) {
+            this.encoderName = null;
+        } else {
+            this.encoderName = encoderName;
+        }
     }
 
     public byte[] toByteArray() {
-        ByteBuffer temp = ByteBuffer.allocate(23);
+        // 31 bytes without codec options and encoder name
+        int baseLength = 31;
+        int additionalLength = 0;
+        byte[] codeOptionsBytes = new byte[]{};
+        if (this.codecOptionsString != null) {
+            codeOptionsBytes = this.codecOptionsString.getBytes(StandardCharsets.UTF_8);
+            additionalLength += codeOptionsBytes.length;
+        }
+        byte[] encoderNameBytes = new byte[]{};
+        if (this.encoderName != null) {
+            encoderNameBytes = this.encoderName.getBytes(StandardCharsets.UTF_8);
+            additionalLength += encoderNameBytes.length;
+        }
+        ByteBuffer temp = ByteBuffer.allocate(baseLength + additionalLength);
         temp.putInt(bitRate);
         temp.putInt(maxFps);
         temp.put(iFrameInterval);
@@ -125,19 +147,29 @@ public class VideoSettings {
         temp.putShort((short) bottom);
         temp.put((byte) (sendFrameMeta ? 1 : 0));
         temp.put((byte) lockedVideoOrientation);
+        temp.putInt(codeOptionsBytes.length);
+        if (codeOptionsBytes.length != 0) {
+            temp.put(codeOptionsBytes);
+        }
+        temp.putInt(encoderNameBytes.length);
+        if (encoderNameBytes.length != 0) {
+            temp.put(encoderNameBytes);
+        }
         return temp.array();
     }
 
     @Override
     public String toString() {
         return "VideoSettings{"
-                + "bitRate=" + bitRate + ", "
-                + "maxFps=" + maxFps + ", "
-                + "iFrameInterval=" + iFrameInterval + ", "
-                + "bounds=" + bounds + ", "
-                + "crop=" + crop + ", "
-                + "metaFrame=" + sendFrameMeta + ", "
-                + "lockedVideoOrientation=" + lockedVideoOrientation
+                + "bitRate=" + bitRate
+                + ", maxFps=" + maxFps
+                + ", iFrameInterval=" + iFrameInterval
+                + ", bounds=" + bounds
+                + ", crop=" + crop
+                + ", metaFrame=" + sendFrameMeta
+                + ", lockedVideoOrientation=" + lockedVideoOrientation
+                + ", codecOptions=" + (this.codecOptionsString == null ? "-" : this.codecOptionsString)
+                + ", encoderName=" + (this.encoderName == null ? "-" : this.encoderName)
                 + "}";
     }
 

@@ -169,7 +169,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
         connection.send(headerBuffer);
     }
 
-    private static MediaCodecInfo[] listEncoders() {
+    public static MediaCodecInfo[] listEncoders() {
         List<MediaCodecInfo> result = new ArrayList<>();
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         for (MediaCodecInfo codecInfo : list.getCodecInfos()) {

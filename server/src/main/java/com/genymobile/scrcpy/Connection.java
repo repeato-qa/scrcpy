@@ -8,6 +8,7 @@ import android.os.Build;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 public abstract class Connection implements Device.RotationListener {
     protected final ControlMessageReader reader = new ControlMessageReader();
@@ -84,6 +85,28 @@ public abstract class Connection implements Device.RotationListener {
         int bottom = data.getShort();
         boolean sendMetaFrame = data.get() != 0;
         int lockedVideoOrientation = data.get();
+        if (data.remaining() > 0) {
+            int codecOptionsLength = data.getInt();
+            if (codecOptionsLength > 0) {
+                byte[] textBuffer = new byte[codecOptionsLength];
+                data.get(textBuffer, 0, codecOptionsLength);
+                String codecOptions = new String(textBuffer, 0, codecOptionsLength, StandardCharsets.UTF_8);
+                if (!codecOptions.isEmpty()) {
+                    videoSettings.setCodecOptions(codecOptions);
+                }
+            }
+        }
+        if (data.remaining() > 0) {
+            int encoderNameLength = data.getInt();
+            if (encoderNameLength > 0) {
+                byte[] textBuffer = new byte[encoderNameLength];
+                data.get(textBuffer, 0, encoderNameLength);
+                String encoderName = new String(textBuffer, 0, encoderNameLength, StandardCharsets.UTF_8);
+                if (!encoderName.isEmpty()) {
+                    videoSettings.setEncoderName(encoderName);
+                }
+            }
+        }
         videoSettings.setBitRate(bitRate);
         videoSettings.setMaxFps(maxFps);
         videoSettings.setIFrameInterval(iFrameInterval);

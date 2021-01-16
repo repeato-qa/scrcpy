@@ -80,10 +80,10 @@ public final class Server {
 
         String codecOptions = args[13];
         options.setCodecOptions(codecOptions);
-        videoSettings.setCodecOptions(CodecOption.parse(options.getCodecOptions()));
+        videoSettings.setCodecOptions(codecOptions);
 
         String encoderName = "-".equals(args[14]) ? null : args[14];
-        options.setEncoderName(encoderName);
+        videoSettings.setEncoderName(encoderName);
     }
 
     private static Rect parseCrop(String crop) {

@@ -18,6 +18,7 @@ public class VideoSettings {
     private byte iFrameInterval = DEFAULT_I_FRAME_INTERVAL;
     private Rect crop;
     private boolean sendFrameMeta; // send PTS so that the client may record properly
+    private int displayId;
     private String codecOptionsString;
     private List<CodecOption> codecOptions;
     private String encoderName;
@@ -52,6 +53,14 @@ public class VideoSettings {
 
     public void setSendFrameMeta(boolean sendFrameMeta) {
         this.sendFrameMeta = sendFrameMeta;
+    }
+
+    public int getDisplayId() {
+        return displayId;
+    }
+
+    public void setDisplayId(int displayId) {
+        this.displayId = displayId;
     }
 
     public int getMaxFps() {
@@ -106,8 +115,8 @@ public class VideoSettings {
     }
 
     public byte[] toByteArray() {
-        // 31 bytes without codec options and encoder name
-        int baseLength = 31;
+        // 35 bytes without codec options and encoder name
+        int baseLength = 35;
         int additionalLength = 0;
         byte[] codeOptionsBytes = new byte[]{};
         if (this.codecOptionsString != null) {
@@ -147,6 +156,7 @@ public class VideoSettings {
         temp.putShort((short) bottom);
         temp.put((byte) (sendFrameMeta ? 1 : 0));
         temp.put((byte) lockedVideoOrientation);
+        temp.putInt(displayId);
         temp.putInt(codeOptionsBytes.length);
         if (codeOptionsBytes.length != 0) {
             temp.put(codeOptionsBytes);
@@ -168,6 +178,7 @@ public class VideoSettings {
                 + ", crop=" + crop
                 + ", metaFrame=" + sendFrameMeta
                 + ", lockedVideoOrientation=" + lockedVideoOrientation
+                + ", displayId=" + displayId
                 + ", codecOptions=" + (this.codecOptionsString == null ? "-" : this.codecOptionsString)
                 + ", encoderName=" + (this.encoderName == null ? "-" : this.encoderName)
                 + "}";

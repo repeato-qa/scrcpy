@@ -85,6 +85,7 @@ public abstract class Connection implements Device.RotationListener {
         int bottom = data.getShort();
         boolean sendMetaFrame = data.get() != 0;
         int lockedVideoOrientation = data.get();
+        int displayId = data.getInt();
         if (data.remaining() > 0) {
             int codecOptionsLength = data.getInt();
             if (codecOptionsLength > 0) {
@@ -118,6 +119,9 @@ public abstract class Connection implements Device.RotationListener {
         }
         videoSettings.setSendFrameMeta(sendMetaFrame);
         videoSettings.setLockedVideoOrientation(lockedVideoOrientation);
+        if (displayId > 0) {
+            videoSettings.setDisplayId(displayId);
+        }
         device.applyNewVideoSetting(videoSettings);
         if (this.streamInvalidateListener != null) {
             streamInvalidateListener.onStreamInvalidate();

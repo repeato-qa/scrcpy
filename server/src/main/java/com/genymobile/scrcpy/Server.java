@@ -70,7 +70,7 @@ public final class Server {
         options.setControl(control);
 
         int displayId = Integer.parseInt(args[10]);
-        options.setDisplayId(displayId);
+        videoSettings.setDisplayId(displayId);
 
         boolean showTouches = Boolean.parseBoolean(args[11]);
         options.setShowTouches(showTouches);

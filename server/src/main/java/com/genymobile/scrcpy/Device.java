@@ -53,7 +53,7 @@ public final class Device {
     private final boolean supportsInputEvents;
 
     public Device(final Options options, final VideoSettings videoSettings) {
-        displayId = options.getDisplayId();
+        displayId = videoSettings.getDisplayId();
         final DisplayInfo displayInfo = SERVICE_MANAGER.getDisplayManager().getDisplayInfo(displayId);
         if (displayInfo == null) {
             int[] displayIds = SERVICE_MANAGER.getDisplayManager().getDisplayIds();

@@ -234,9 +234,11 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
         Ln.d("Client has left the room!");
         FilePushHandler.cancelAllForConnection(conn);
-        receivingClientsCount--;
         ConnectionInfo info = conn.getAttachment();
         if (info != null) {
+            if (info.isReceiving) {
+                receivingClientsCount--;
+            }
             info.release();
         }
         checkConnectionsCount();

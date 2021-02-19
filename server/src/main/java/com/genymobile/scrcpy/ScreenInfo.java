@@ -171,13 +171,13 @@ public final class ScreenInfo {
     }
 
     public byte[] toByteArray() {
-        ByteBuffer temp = ByteBuffer.allocate(4 * 2 + 2 * 2 + 1);
-        temp.putShort((short) contentRect.left);
-        temp.putShort((short) contentRect.top);
-        temp.putShort((short) contentRect.right);
-        temp.putShort((short) contentRect.bottom);
-        temp.putShort((short) unlockedVideoSize.getWidth());
-        temp.putShort((short) unlockedVideoSize.getHeight());
+        ByteBuffer temp = ByteBuffer.allocate(6 * 4 + 1);
+        temp.putInt(contentRect.left);
+        temp.putInt(contentRect.top);
+        temp.putInt(contentRect.right);
+        temp.putInt(contentRect.bottom);
+        temp.putInt(unlockedVideoSize.getWidth());
+        temp.putInt(unlockedVideoSize.getHeight());
         temp.put((byte) getVideoRotation());
         return temp.array();
     }

@@ -88,7 +88,7 @@ public class VideoSettings {
     }
 
     public void setBounds(int width, int height) {
-        this.bounds = new Size(width  & ~15, height & ~15); // multiple of 16
+        this.bounds = new Size(width & ~15, height & ~15); // multiple of 16
     }
 
     public List<CodecOption> getCodecOptions() {
@@ -166,6 +166,78 @@ public class VideoSettings {
             temp.put(encoderNameBytes);
         }
         return temp.array();
+    }
+
+    public void merge(VideoSettings source) {
+        codecOptions = source.codecOptions;
+        codecOptionsString = source.codecOptionsString;
+        encoderName = source.encoderName;
+        bitRate = source.bitRate;
+        maxFps = source.maxFps;
+        iFrameInterval = source.iFrameInterval;
+        bounds = source.bounds;
+        crop = source.crop;
+        sendFrameMeta = source.sendFrameMeta;
+        lockedVideoOrientation = source.lockedVideoOrientation;
+        displayId = source.displayId;
+    }
+
+    public static VideoSettings fromByteArray(byte[] bytes) {
+        VideoSettings videoSettings = new VideoSettings();
+        mergeFromByteArray(videoSettings, bytes);
+        return videoSettings;
+    }
+
+    public static void mergeFromByteArray(VideoSettings videoSettings, byte[] bytes) {
+        ByteBuffer data = ByteBuffer.wrap(bytes);
+        int bitRate = data.getInt();
+        int maxFps = data.getInt();
+        byte iFrameInterval = data.get();
+        int width = data.getShort();
+        int height = data.getShort();
+        int left = data.getShort();
+        int top = data.getShort();
+        int right = data.getShort();
+        int bottom = data.getShort();
+        boolean sendMetaFrame = data.get() != 0;
+        int lockedVideoOrientation = data.get();
+        int displayId = data.getInt();
+        if (data.remaining() > 0) {
+            int codecOptionsLength = data.getInt();
+            if (codecOptionsLength > 0) {
+                byte[] textBuffer = new byte[codecOptionsLength];
+                data.get(textBuffer, 0, codecOptionsLength);
+                String codecOptions = new String(textBuffer, 0, codecOptionsLength, StandardCharsets.UTF_8);
+                if (!codecOptions.isEmpty()) {
+                    videoSettings.setCodecOptions(codecOptions);
+                }
+            }
+        }
+        if (data.remaining() > 0) {
+            int encoderNameLength = data.getInt();
+            if (encoderNameLength > 0) {
+                byte[] textBuffer = new byte[encoderNameLength];
+                data.get(textBuffer, 0, encoderNameLength);
+                String encoderName = new String(textBuffer, 0, encoderNameLength, StandardCharsets.UTF_8);
+                if (!encoderName.isEmpty()) {
+                    videoSettings.setEncoderName(encoderName);
+                }
+            }
+        }
+        videoSettings.setBitRate(bitRate);
+        videoSettings.setMaxFps(maxFps);
+        videoSettings.setIFrameInterval(iFrameInterval);
+        videoSettings.setBounds(width, height);
+        if (left == 0 && right == 0 && top == 0 && bottom == 0) {
+            videoSettings.setCrop(null);
+        } else {
+            videoSettings.setCrop(new Rect(left, top, right, bottom));
+        }
+        videoSettings.setSendFrameMeta(sendMetaFrame);
+        videoSettings.setLockedVideoOrientation(lockedVideoOrientation);
+        if (displayId > 0) {
+            videoSettings.setDisplayId(displayId);
+        }
     }
 
     @Override

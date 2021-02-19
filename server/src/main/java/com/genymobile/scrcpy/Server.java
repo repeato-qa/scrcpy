@@ -28,7 +28,11 @@ public final class Server {
         if (args[1].toLowerCase().equals("web")) {
             options.setServerType(Options.TYPE_WEB_SOCKET);
             if (args.length > 2) {
-                int portNumber = Integer.parseInt(args[2]);
+                Ln.Level level = Ln.Level.valueOf(args[2].toUpperCase(Locale.ENGLISH));
+                options.setLogLevel(level);
+            }
+            if (args.length > 3) {
+                int portNumber = Integer.parseInt(args[3]);
                 options.setPortNumber(portNumber);
             }
             return;
@@ -150,7 +154,9 @@ public final class Server {
         if (options.getServerType() == Options.TYPE_LOCAL_SOCKET) {
             new DesktopConnection(options, videoSettings);
         } else if (options.getServerType() == Options.TYPE_WEB_SOCKET) {
-            new WebSocketConnection(options, videoSettings);
+            WSServer wsServer = new WSServer(options);
+            wsServer.setReuseAddr(true);
+            wsServer.run();
         }
     }
 }

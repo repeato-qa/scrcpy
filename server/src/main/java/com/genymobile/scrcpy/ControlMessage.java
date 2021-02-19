@@ -48,6 +48,7 @@ public final class ControlMessage {
     private int pushChunkSize;
     private int fileSize;
     private String fileName;
+    private VideoSettings videoSettings;
 
     private ControlMessage() {
     }
@@ -110,7 +111,7 @@ public final class ControlMessage {
     public static ControlMessage createChangeSteamParameters(byte[] bytes) {
         ControlMessage event = new ControlMessage();
         event.type = TYPE_CHANGE_STREAM_PARAMETERS;
-        event.bytes = bytes;
+        event.videoSettings = VideoSettings.fromByteArray(bytes);
         return event;
     }
 
@@ -235,5 +236,9 @@ public final class ControlMessage {
 
     public int getFileSize() {
         return fileSize;
+    }
+
+    public VideoSettings getVideoSettings() {
+        return videoSettings;
     }
 }

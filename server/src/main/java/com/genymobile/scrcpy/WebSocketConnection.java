@@ -3,112 +3,78 @@ package com.genymobile.scrcpy;
 import android.media.MediaCodecInfo;
 
 import org.java_websocket.WebSocket;
-import org.java_websocket.framing.CloseFrame;
-import org.java_websocket.handshake.ClientHandshake;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.BindException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
-public class WebSocketConnection extends Connection implements WSServer.EventsHandler {
-    private WSServer wsServer;
-    private short receivingClientsCount = 0;
+public class WebSocketConnection extends Connection {
     private static final byte[] MAGIC_BYTES_INITIAL = "scrcpy_initial".getBytes(StandardCharsets.UTF_8);
     private static final byte[] MAGIC_BYTES_MESSAGE = "scrcpy_message".getBytes(StandardCharsets.UTF_8);
     private static final byte[] DEVICE_NAME_BYTES = Device.getDeviceName().getBytes(StandardCharsets.UTF_8);
-    private static final String PID_FILE_PATH = "/data/local/tmp/ws_scrcpy.pid";
+    private final WSServer wsServer;
+    private final HashSet<WebSocket> sockets = new HashSet<>();
+    private ScreenEncoder screenEncoder;
 
-    public WebSocketConnection(Options options, VideoSettings videoSettings) throws IOException {
+    public WebSocketConnection(Options options, VideoSettings videoSettings, WSServer wsServer) {
         super(options, videoSettings);
-        unlinkPidFile();
-        wsServer = new WSServer(this, options.getPortNumber());
-        wsServer.setReuseAddr(true);
-        wsServer.run();
+        this.wsServer = wsServer;
     }
 
-    private static final class ConnectionInfo {
-        private static final HashSet<Short> INSTANCES_BY_ID = new HashSet<>();
-        private final short id;
-        private boolean isReceiving;
-
-        ConnectionInfo(short id, boolean isReceiving) {
-            this.id = id;
-            this.isReceiving = isReceiving;
-            INSTANCES_BY_ID.add(id);
-        }
-
-        public static short getNextClientId() {
-            short nextClientId = 0;
-            while (INSTANCES_BY_ID.contains(++nextClientId)) {
-                if (nextClientId == Short.MAX_VALUE) {
-                    return -1;
-                }
+    public void join(WebSocket webSocket) {
+        sockets.add(webSocket);
+        wsServer.sendInitialInfoToAll();
+        if (screenEncoder == null || !screenEncoder.isAlive()) {
+            Ln.d("First connection. Start new encoder.");
+            device.setRotationListener(this);
+            screenEncoder = new ScreenEncoder(videoSettings);
+            screenEncoder.start(device, this);
+        } else {
+            if (this.streamInvalidateListener != null) {
+                streamInvalidateListener.onStreamInvalidate();
             }
-            return nextClientId;
         }
+    }
 
-        public short getId() {
-            return id;
-        }
-
-        public boolean getIsReceiving() {
-            return isReceiving;
-        }
-
-        public void setIsReceiving(boolean isReceiving) {
-            this.isReceiving = isReceiving;
-        }
-
-        public void release() {
-            INSTANCES_BY_ID.remove(id);
+    public void leave(WebSocket webSocket) {
+        sockets.remove(webSocket);
+        if (sockets.isEmpty()) {
+            Ln.d("Last client has left");
+            this.release();
+        } else {
+            wsServer.sendInitialInfoToAll();
         }
     }
 
     public static ByteBuffer deviceMessageToByteBuffer(DeviceMessage msg) {
         ByteBuffer buffer = ByteBuffer.wrap(msg.writeToByteArray(MAGIC_BYTES_MESSAGE.length));
         buffer.put(MAGIC_BYTES_MESSAGE);
-        buffer.position(0);
+        buffer.rewind();
         return buffer;
     }
 
     @Override
     void send(ByteBuffer data) {
-        Collection<WebSocket> connections = wsServer.getConnections();
-        if (connections.isEmpty()) {
+        if (sockets.isEmpty()) {
             return;
         }
-        for (WebSocket conn : wsServer.getConnections()) {
-            ConnectionInfo info = conn.getAttachment();
-            if (!conn.isOpen() || info == null) {
+        for (WebSocket webSocket : sockets) {
+            WSServer.SocketInfo info = webSocket.getAttachment();
+            if (!webSocket.isOpen() || info == null) {
                 continue;
             }
-            if (info.getIsReceiving()) {
-                conn.send(data);
-            }
+            webSocket.send(data);
         }
     }
 
-    private void sendInitialInfoToAll() {
-        Collection<WebSocket> connections = wsServer.getConnections();
-        if (connections.isEmpty()) {
-            return;
-        }
-        for (WebSocket conn : wsServer.getConnections()) {
-            ConnectionInfo info = conn.getAttachment();
-            if (!conn.isOpen() && info == null) {
-                continue;
-            }
-            short clientId = info.getId();
-            conn.send(getInitialInfo(clientId, receivingClientsCount));
-        }
-
+    public static void sendInitialInfo(ByteBuffer initialInfo, WebSocket webSocket, int clientId) {
+        initialInfo.position(initialInfo.capacity() - 4);
+        initialInfo.putInt(clientId);
+        initialInfo.rewind();
+        webSocket.send(initialInfo);
     }
 
     public void sendDeviceMessage(DeviceMessage msg) {
@@ -118,32 +84,67 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
 
     @Override
     public boolean hasConnections() {
-        return receivingClientsCount > 0;
+        return sockets.size() > 0;
     }
 
     @Override
     public void close() throws Exception {
-        wsServer.stop();
+//        wsServer.stop();
     }
 
-    public void setVideoSettings(byte[] bytes) {
-        super.setVideoSettings(bytes);
-        sendInitialInfoToAll();
+    @Override
+    public void setVideoSettings(VideoSettings videoSettings) {
+        super.setVideoSettings(videoSettings);
+        wsServer.sendInitialInfoToAll();
+    }
+
+    public VideoSettings getVideoSettings() {
+        return videoSettings;
+    }
+
+    public Controller getController() {
+        return controller;
+    }
+
+    public Device getDevice() {
+        return device;
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
-    protected ByteBuffer getInitialInfo(short clientId, short clientsCount) {
-        byte[] screenInfoBytes = device.getScreenInfo().toByteArray();
-        byte[] videoSettingsBytes = videoSettings.toByteArray();
-        int magicBytesLength = MAGIC_BYTES_INITIAL.length;
-
-        int baseLength = magicBytesLength
+    public static ByteBuffer getInitialInfo() {
+        int baseLength = MAGIC_BYTES_INITIAL.length
                 + DEVICE_NAME_FIELD_LENGTH
-                + screenInfoBytes.length
-                + videoSettingsBytes.length
-                + 2   // short clientId
-                + 2;  // short clientsCount
+                + 4                          // displays count
+                + 4;                         // client id
         int additionalLength = 0;
+        int[] displayIds = Device.getDisplayIds();
+        List<DisplayInfo> displayInfoList = new ArrayList<>();
+        HashMap<Integer, Integer> connectionsCount = new HashMap<>();
+        HashMap<Integer, byte[]> displayInfoMap = new HashMap<>();
+        HashMap<Integer, byte[]> videoSettingsBytesMap = new HashMap<>();
+        HashMap<Integer, byte[]> screenInfoBytesMap = new HashMap<>();
+
+        for (int displayId : displayIds) {
+            DisplayInfo displayInfo = Device.getDisplayInfo(displayId);
+            displayInfoList.add(displayId, displayInfo);
+            byte[] displayInfoBytes = displayInfo.toByteArray();
+            additionalLength += displayInfoBytes.length;
+            displayInfoMap.put(displayId, displayInfoBytes);
+            WebSocketConnection connection = WSServer.getConnectionForDisplay(displayId);
+            additionalLength += 4; // for connection.connections.size()
+            additionalLength += 4; // for screenInfoBytes.length
+            additionalLength += 4; // for videoSettingsBytes.length
+            if (connection != null) {
+                connectionsCount.put(displayId, connection.sockets.size());
+                byte[] screenInfoBytes = connection.getDevice().getScreenInfo().toByteArray();
+                additionalLength += screenInfoBytes.length;
+                screenInfoBytesMap.put(displayId, screenInfoBytes);
+                byte[] videoSettingsBytes = connection.getVideoSettings().toByteArray();
+                additionalLength += videoSettingsBytes.length;
+                videoSettingsBytesMap.put(displayId, videoSettingsBytes);
+            }
+        }
+
         MediaCodecInfo[] encoders = ScreenEncoder.listEncoders();
         List<byte[]> encodersNames = new ArrayList<>();
         if (encoders != null && encoders.length > 0) {
@@ -154,153 +155,54 @@ public class WebSocketConnection extends Connection implements WSServer.EventsHa
                 encodersNames.add(nameBytes);
             }
         }
-        byte[] fullInfo = new byte[baseLength + additionalLength];
-        System.arraycopy(MAGIC_BYTES_INITIAL, 0, fullInfo, 0, magicBytesLength);
-        int len = Math.min(DEVICE_NAME_FIELD_LENGTH - 1, DEVICE_NAME_BYTES.length);
-        System.arraycopy(DEVICE_NAME_BYTES, 0, fullInfo, magicBytesLength, len);
-        ByteBuffer full = ByteBuffer.wrap(fullInfo);
-        full.position(magicBytesLength + DEVICE_NAME_FIELD_LENGTH);
-        full.put(screenInfoBytes);
-        full.put(videoSettingsBytes);
-        full.putShort(clientId);
-        full.putShort(clientsCount);
-        full.putInt(encodersNames.size());
-        for (byte[] encoderNameBytes: encodersNames) {
-            full.putInt(encoderNameBytes.length);
-            full.put(encoderNameBytes);
-        }
-        full.rewind();
-        return full;
-    }
 
-    private static void unlinkPidFile() {
-        try {
-            File pidFile = new File(WebSocketConnection.PID_FILE_PATH);
-            if (pidFile.exists()) {
-                pidFile.delete();
+        byte[] fullBytes = new byte[baseLength + additionalLength];
+        ByteBuffer initialInfo = ByteBuffer.wrap(fullBytes);
+        initialInfo.put(MAGIC_BYTES_INITIAL);
+        initialInfo.put(DEVICE_NAME_BYTES, 0, Math.min(DEVICE_NAME_FIELD_LENGTH - 1, DEVICE_NAME_BYTES.length));
+        initialInfo.position(MAGIC_BYTES_INITIAL.length + DEVICE_NAME_FIELD_LENGTH);
+        initialInfo.putInt(displayIds.length);
+        for (DisplayInfo displayInfo : displayInfoList) {
+            int displayId = displayInfo.getDisplayId();
+            if (displayInfoMap.containsKey(displayId)) {
+                initialInfo.put(displayInfoMap.get(displayId));
             }
-        } catch (Exception e) {
-            Ln.e("Could not unlink server", e);
-        }
-    }
-
-    private static void writePidFile() {
-        File file = new File(PID_FILE_PATH);
-        FileOutputStream stream;
-        try {
-            stream = new FileOutputStream(file, false);
-            stream.write(Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            Ln.e(e.getMessage());
-        }
-    }
-
-    private void checkConnectionsCount() {
-        if (receivingClientsCount == 0) {
-            Ln.d("No receiving clients.");
-            device.setRotationListener(null);
-        } else {
-            if (receivingClientsCount == 1 && !device.isScreenOn()) {
-                controller.turnScreenOn();
+            int count = 0;
+            if (connectionsCount.containsKey(displayId)) {
+                count = connectionsCount.get(displayId);
             }
-            if (screenEncoder == null || !screenEncoder.isAlive()) {
-                Ln.d("New connection while encoder is dead.");
-                device.setRotationListener(this);
-                screenEncoder = new ScreenEncoder(videoSettings);
-                screenEncoder.start(device, this);
+            initialInfo.putInt(count);
+            if (screenInfoBytesMap.containsKey(displayId)) {
+                byte[] screenInfo = screenInfoBytesMap.get(displayId);
+                initialInfo.putInt(screenInfo.length);
+                initialInfo.put(screenInfo);
+            } else {
+                initialInfo.putInt(0);
+            }
+            if (videoSettingsBytesMap.containsKey(displayId)) {
+                byte[] videoSettings = videoSettingsBytesMap.get(displayId);
+                initialInfo.putInt(videoSettings.length);
+                initialInfo.put(videoSettings);
+            } else {
+                initialInfo.putInt(0);
             }
         }
-    }
-
-    @Override
-    public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        if (conn.isOpen()) {
-            short clientId = ConnectionInfo.getNextClientId();
-            if (clientId == -1) {
-                conn.close(CloseFrame.TRY_AGAIN_LATER);
-                return;
-            }
-            ConnectionInfo info = new ConnectionInfo(clientId, false);
-            conn.setAttachment(info);
-            conn.send(getInitialInfo(clientId, receivingClientsCount));
-            Ln.d("Client entered the room!");
-            if (this.streamInvalidateListener != null) {
-                streamInvalidateListener.onStreamInvalidate();
-            }
+        initialInfo.putInt(encodersNames.size());
+        for (byte[] encoderNameBytes : encodersNames) {
+            initialInfo.putInt(encoderNameBytes.length);
+            initialInfo.put(encoderNameBytes);
         }
-    }
 
-    @Override
-    public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        Ln.d("Client has left the room!");
-        FilePushHandler.cancelAllForConnection(conn);
-        ConnectionInfo info = conn.getAttachment();
-        if (info != null) {
-            if (info.isReceiving) {
-                receivingClientsCount--;
-            }
-            info.release();
-        }
-        checkConnectionsCount();
-        sendInitialInfoToAll();
-    }
-
-    @Override
-    public void onMessage(WebSocket conn, String message) {
-        String address = conn.getRemoteSocketAddress().getAddress().getHostAddress();
-        Ln.d("+  " + address + ": " + message);
-    }
-
-    @Override
-    public void onMessage(WebSocket conn, ByteBuffer message) {
-        String address = conn.getRemoteSocketAddress().getAddress().getHostAddress();
-        ControlMessage controlMessage = reader.parseEvent(message);
-        if (controlMessage != null) {
-            if (controlMessage.getType() == ControlMessage.TYPE_PUSH_FILE) {
-                FilePushHandler.handlePush(conn, controlMessage);
-                return;
-            }
-            if (controlMessage.getType() == ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
-                ConnectionInfo info = conn.getAttachment();
-                if (info == null) {
-                    Ln.e("No info attached to connection");
-                    return;
-                }
-                if (!info.getIsReceiving()) {
-                    info.setIsReceiving(true);
-                    receivingClientsCount++;
-                    checkConnectionsCount();
-                }
-            }
-            controller.handleEvent(controlMessage);
-
-        } else {
-            Ln.d("-1 " + address + ": " + message);
-        }
-    }
-
-    @Override
-    public void onError(WebSocket conn, Exception ex) {
-        Ln.e("WebSocket error", ex);
-        if (conn != null) {
-            // some errors like port binding failed may not be assignable to a specific websocket
-            FilePushHandler.cancelAllForConnection(conn);
-        }
-        if (ex instanceof BindException) {
-            System.exit(1);
-        }
-    }
-
-    @Override
-    public void onStart() {
-        Ln.d("Server started!");
-        wsServer.setConnectionLostTimeout(0);
-        wsServer.setConnectionLostTimeout(100);
-        writePidFile();
+        return initialInfo;
     }
 
     public void onRotationChanged(int rotation) {
         super.onRotationChanged(rotation);
-        sendInitialInfoToAll();
+        wsServer.sendInitialInfoToAll();
+    }
+
+    private void release() {
+        WSServer.releaseConnectionForDisplay(this.videoSettings.getDisplayId());
+        // encoder will stop itself after checking .hasConnections()
     }
 }

@@ -120,7 +120,7 @@ public final class DesktopConnection extends Connection {
             public void run() {
                 try {
                     // on start, power on the device
-                    if (!device.isScreenOn()) {
+                    if (!Device.isScreenOn()) {
                         controller.turnScreenOn();
 
                         // dirty hack

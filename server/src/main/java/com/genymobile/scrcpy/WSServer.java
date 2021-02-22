@@ -186,6 +186,7 @@ public class WSServer extends WebSocketServer {
         try {
             stream = new FileOutputStream(file, false);
             stream.write(Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.UTF_8));
+            stream.close();
         } catch (IOException e) {
             Ln.e(e.getMessage());
         }

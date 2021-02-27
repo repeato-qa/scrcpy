@@ -47,9 +47,8 @@ public class WebSocketConnection extends Connection {
         if (sockets.isEmpty()) {
             Ln.d("Last client has left");
             this.release();
-        } else {
-            wsServer.sendInitialInfoToAll();
         }
+        wsServer.sendInitialInfoToAll();
     }
 
     public static ByteBuffer deviceMessageToByteBuffer(DeviceMessage msg) {

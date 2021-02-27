@@ -27,6 +27,9 @@ public class WebSocketConnection extends Connection {
     public void join(WebSocket webSocket) {
         sockets.add(webSocket);
         wsServer.sendInitialInfoToAll();
+        if (!Device.isScreenOn()) {
+            controller.turnScreenOn();
+        }
         if (screenEncoder == null || !screenEncoder.isAlive()) {
             Ln.d("First connection. Start new encoder.");
             device.setRotationListener(this);

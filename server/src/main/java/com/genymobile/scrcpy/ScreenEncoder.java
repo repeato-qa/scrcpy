@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ScreenEncoder implements Connection.StreamInvalidateListener, Runnable {
 
@@ -24,6 +25,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
 
     private static final int NO_PTS = -1;
 
+    private final AtomicBoolean streamIsInvalide = new AtomicBoolean();
     private final ByteBuffer headerBuffer = ByteBuffer.allocate(12);
     private Thread selectorThread;
 
@@ -32,7 +34,6 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
     private Connection connection;
     private VideoSettings videoSettings;
     private MediaFormat format;
-    private MediaCodec codec;
 
     public ScreenEncoder(VideoSettings videoSettings) {
         this.videoSettings = videoSettings;
@@ -54,10 +55,12 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
     @Override
     public void onStreamInvalidate() {
         Ln.d("invalidate stream");
+        streamIsInvalide.set(true);
         updateFormat();
-        if (codec != null) {
-            codec.release();
-        }
+    }
+
+    public boolean consumeStreamInvalidation() {
+        return streamIsInvalide.getAndSet(false);
     }
 
     public boolean isAlive() {
@@ -85,7 +88,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
         boolean alive;
         try {
             do {
-                codec = createCodec(videoSettings.getEncoderName());
+                MediaCodec codec = createCodec(videoSettings.getEncoderName());
                 IBinder display = createDisplay();
                 ScreenInfo screenInfo = device.getScreenInfo();
                 Rect contentRect = screenInfo.getContentRect();
@@ -105,13 +108,10 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
                     alive = encode(codec);
                     // do not call stop() on exception, it would trigger an IllegalStateException
                     codec.stop();
-                } catch (IllegalStateException e) {
-                    alive = connection.hasConnections();
                 } finally {
                     destroyDisplay(display);
                     codec.release();
                     surface.release();
-                    codec = null;
                 }
             } while (alive);
         } finally {
@@ -119,14 +119,18 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
         }
     }
 
-    private boolean encode(MediaCodec codec) throws IOException, IllegalStateException {
+    private boolean encode(MediaCodec codec) throws IOException {
         boolean eof = false;
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
 
-        while (!eof && connection.hasConnections()) {
+        while (!consumeStreamInvalidation() && !eof && connection.hasConnections()) {
             int outputBufferId = codec.dequeueOutputBuffer(bufferInfo, -1);
             eof = (bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
             try {
+                if (consumeStreamInvalidation()) {
+                    // must restart encoding with new size
+                    break;
+                }
                 if (outputBufferId >= 0) {
                     ByteBuffer codecBuffer = codec.getOutputBuffer(outputBufferId);
 

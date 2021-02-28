@@ -34,6 +34,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
     private Connection connection;
     private VideoSettings videoSettings;
     private MediaFormat format;
+    private int timeout = -1;
 
     public ScreenEncoder(VideoSettings videoSettings) {
         this.videoSettings = videoSettings;
@@ -42,6 +43,12 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
 
     private void updateFormat() {
         format = createFormat(videoSettings);
+        int maxFps = videoSettings.getMaxFps();
+        if (maxFps > 0) {
+            timeout = 1_000_000 / maxFps;
+        } else {
+            timeout = -1;
+        }
     }
 
     public void setConnection(Connection connection) {
@@ -124,7 +131,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
 
         while (!consumeStreamInvalidation() && !eof && connection.hasConnections()) {
-            int outputBufferId = codec.dequeueOutputBuffer(bufferInfo, -1);
+            int outputBufferId = codec.dequeueOutputBuffer(bufferInfo, timeout);
             eof = (bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
             try {
                 if (consumeStreamInvalidation()) {

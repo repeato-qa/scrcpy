@@ -118,14 +118,13 @@ public class WSServer extends WebSocketServer {
             if (controlMessage.getType() == ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
                 VideoSettings videoSettings = controlMessage.getVideoSettings();
                 int displayId = videoSettings.getDisplayId();
-                if (connection == null) {
-                    connection = joinStreamForDisplayId(webSocket, videoSettings, options, displayId, this);
-                } else {
+                if (connection != null) {
                     if (connection.getVideoSettings().getDisplayId() != displayId) {
                         connection.leave(webSocket);
-                        connection = joinStreamForDisplayId(webSocket, videoSettings, options, displayId, this);
                     }
                 }
+                joinStreamForDisplayId(webSocket, videoSettings, options, displayId, this);
+                return;
             }
             if (connection != null) {
                 Controller controller = connection.getController();
@@ -156,7 +155,7 @@ public class WSServer extends WebSocketServer {
         writePidFile();
     }
 
-    private static WebSocketConnection joinStreamForDisplayId(
+    private static void joinStreamForDisplayId(
             WebSocket webSocket, VideoSettings videoSettings, Options options, int displayId, WSServer wsServer) {
         SocketInfo socketInfo = webSocket.getAttachment();
         WebSocketConnection connection = STREAM_BY_DISPLAY_ID.get(displayId);
@@ -165,8 +164,7 @@ public class WSServer extends WebSocketServer {
             STREAM_BY_DISPLAY_ID.put(displayId, connection);
         }
         socketInfo.setConnection(connection);
-        connection.join(webSocket);
-        return connection;
+        connection.join(webSocket, videoSettings);
     }
 
     private static void unlinkPidFile() {

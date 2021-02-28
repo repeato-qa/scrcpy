@@ -24,8 +24,9 @@ public class WebSocketConnection extends Connection {
         this.wsServer = wsServer;
     }
 
-    public void join(WebSocket webSocket) {
+    public void join(WebSocket webSocket, VideoSettings videoSettings) {
         sockets.add(webSocket);
+        boolean changed = setVideoSettings(videoSettings);
         wsServer.sendInitialInfoToAll();
         if (!Device.isScreenOn()) {
             controller.turnScreenOn();
@@ -36,8 +37,10 @@ public class WebSocketConnection extends Connection {
             screenEncoder = new ScreenEncoder(videoSettings);
             screenEncoder.start(device, this);
         } else {
-            if (this.streamInvalidateListener != null) {
-                streamInvalidateListener.onStreamInvalidate();
+            if (!changed) {
+                if (this.streamInvalidateListener != null) {
+                    streamInvalidateListener.onStreamInvalidate();
+                }
             }
         }
     }
@@ -63,12 +66,14 @@ public class WebSocketConnection extends Connection {
         if (sockets.isEmpty()) {
             return;
         }
-        for (WebSocket webSocket : sockets) {
-            WSServer.SocketInfo info = webSocket.getAttachment();
-            if (!webSocket.isOpen() || info == null) {
-                continue;
+        synchronized (sockets) {
+            for (WebSocket webSocket : sockets) {
+                WSServer.SocketInfo info = webSocket.getAttachment();
+                if (!webSocket.isOpen() || info == null) {
+                    continue;
+                }
+                webSocket.send(data);
             }
-            webSocket.send(data);
         }
     }
 
@@ -92,12 +97,6 @@ public class WebSocketConnection extends Connection {
     @Override
     public void close() throws Exception {
 //        wsServer.stop();
-    }
-
-    @Override
-    public void setVideoSettings(VideoSettings videoSettings) {
-        super.setVideoSettings(videoSettings);
-        wsServer.sendInitialInfoToAll();
     }
 
     public VideoSettings getVideoSettings() {

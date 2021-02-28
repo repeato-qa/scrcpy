@@ -74,12 +74,16 @@ public abstract class Connection implements Device.RotationListener, Device.Clip
         }
     }
 
-    public void setVideoSettings(VideoSettings newSettings) {
-        videoSettings.merge(newSettings);
-        device.applyNewVideoSetting(videoSettings);
-        if (this.streamInvalidateListener != null) {
-            streamInvalidateListener.onStreamInvalidate();
+    public boolean setVideoSettings(VideoSettings newSettings) {
+        if (!videoSettings.equals(newSettings)) {
+            videoSettings.merge(newSettings);
+            device.applyNewVideoSetting(videoSettings);
+            if (this.streamInvalidateListener != null) {
+                streamInvalidateListener.onStreamInvalidate();
+            }
+            return true;
         }
+        return false;
     }
 
     public void setStreamInvalidateListener(StreamInvalidateListener listener) {

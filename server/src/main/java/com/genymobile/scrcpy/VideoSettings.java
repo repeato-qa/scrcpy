@@ -5,6 +5,7 @@ import android.graphics.Rect;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 public class VideoSettings {
     private static final int DEFAULT_BIT_RATE = 8000000;
@@ -99,6 +100,8 @@ public class VideoSettings {
         this.codecOptions = CodecOption.parse(codecOptionsString);
         if (codecOptionsString.equals("-")) {
             this.codecOptionsString = null;
+        } else {
+            this.codecOptionsString = codecOptionsString;
         }
     }
 
@@ -238,6 +241,34 @@ public class VideoSettings {
         if (displayId > 0) {
             videoSettings.setDisplayId(displayId);
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        VideoSettings s = (VideoSettings) o;
+        if (bitRate != s.bitRate || maxFps != s.maxFps || lockedVideoOrientation != s.lockedVideoOrientation || iFrameInterval != s.iFrameInterval
+                || sendFrameMeta != s.sendFrameMeta || displayId != s.displayId) {
+            return false;
+        }
+        if (!Objects.equals(codecOptionsString, s.codecOptionsString) || !Objects.equals(encoderName, s.encoderName)
+                || !Objects.equals(bounds, s.bounds) || !Objects.equals(crop, s.crop)) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(bitRate, maxFps, lockedVideoOrientation, iFrameInterval, sendFrameMeta,
+                displayId, Objects.hashCode(codecOptionsString), Objects.hashCode(encoderName),
+                Objects.hashCode(bounds), Objects.hashCode(crop));
     }
 
     @Override

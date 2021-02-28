@@ -116,9 +116,6 @@ public class Controller {
             case ControlMessage.TYPE_ROTATE_DEVICE:
                 Device.rotateDevice();
                 break;
-            case ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS:
-                connection.setVideoSettings(msg.getVideoSettings());
-                break;
             default:
                 // do nothing
         }

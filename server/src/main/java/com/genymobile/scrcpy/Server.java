@@ -35,6 +35,10 @@ public final class Server {
                 int portNumber = Integer.parseInt(args[3]);
                 options.setPortNumber(portNumber);
             }
+            if (args.length > 4) {
+                boolean listenOnAllInterfaces = Boolean.parseBoolean(args[4]);
+                options.setListenOnAllInterfaces(listenOnAllInterfaces);
+            }
             return;
         }
 

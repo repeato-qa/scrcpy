@@ -22,6 +22,7 @@ public class Options {
     private String encoderName;
     private int serverType = TYPE_LOCAL_SOCKET;
     private int portNumber = 8886;
+    private boolean listenOnAllInterfaces = true;
 
     public Ln.Level getLogLevel() {
         return logLevel;
@@ -153,6 +154,14 @@ public class Options {
         return this.portNumber;
     }
 
+    public boolean getListenOnAllInterfaces() {
+        return this.listenOnAllInterfaces;
+    }
+
+    public void setListenOnAllInterfaces(boolean value) {
+        this.listenOnAllInterfaces = value;
+    }
+
     @Override
     public String toString() {
         return "Options{"
@@ -163,6 +172,7 @@ public class Options {
                 + ", crop=" + crop
                 + ", sendFrameMeta=" + sendFrameMeta
                 + ", serverType=" + (serverType == TYPE_LOCAL_SOCKET ? "local" : "web")
+                + ", listenOnAllInterfaces=" + (this.listenOnAllInterfaces ? "true" : "false")
                 + '}';
     }
 }

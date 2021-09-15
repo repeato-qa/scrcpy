@@ -60,7 +60,7 @@ public class WSServer extends WebSocketServer {
     private static final HashMap<Integer, WebSocketConnection> STREAM_BY_DISPLAY_ID = new HashMap<>();
 
     public WSServer(Options options) {
-        super(new InetSocketAddress(options.getPortNumber()));
+        super(new InetSocketAddress(options.getListenOnAllInterfaces() ? "0.0.0.0" : "127.0.0.1", options.getPortNumber()));
         this.options = options;
         unlinkPidFile();
     }

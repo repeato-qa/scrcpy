@@ -1,10 +1,12 @@
 package com.genymobile.scrcpy;
 
 import android.graphics.Rect;
+import android.util.Log;
 
 import java.nio.ByteBuffer;
 
 public final class ScreenInfo {
+    private static String TAG = "scrcpy";
     /**
      * Device (physical) size, possibly cropped
      */
@@ -107,7 +109,29 @@ public final class ScreenInfo {
         }
 
         Size bounds = videoSettings.getBounds();
+        Log.d(TAG, "Bounds: " + bounds);
+
         Size videoSize = computeVideoSize(contentRect.width(), contentRect.height(), bounds);
+
+        // the output video might have a different aspect ratio than the device screen, due to the fact that h264 encoders can only transfer resolutions multiple of 16
+        // so we have 2 options in such a case:
+        // 1. keep aspect ratio -> black bar(s) right and bottom of video
+        // 2. distort video -> slightly different video, but hardly visible
+        // In this case we prefer option 1 (black bars). TODO: make KeepAspectRatio configureable
+        boolean KeepAspectRatio = true;
+        if (KeepAspectRatio) {
+            int paddingRight = videoSize.getWidth() - contentRect.width();
+            if (paddingRight != 0) {
+                contentRect.right += paddingRight;
+            }
+
+            int paddingBottom = videoSize.getHeight() - contentRect.height();
+            if (paddingBottom != 0) {
+                contentRect.bottom += paddingBottom;
+            }
+            //Log.d(TAG, "contentRect after" + contentRect.toString());
+            Log.d(TAG, "videoSize width: " + videoSize.getWidth() + " videoSize.height:" + videoSize.getHeight());
+        }
         return new ScreenInfo(contentRect, videoSize, rotation, lockedVideoOrientation);
     }
 
@@ -115,10 +139,16 @@ public final class ScreenInfo {
         return rect.width() + ":" + rect.height() + ":" + rect.left + ":" + rect.top;
     }
 
+    private static int roundUp(int n, int multiple) {
+        return (int) Math.floor((n + multiple - 1) / multiple) * multiple;
+    }
+
     private static Size computeVideoSize(int w, int h, Size bounds) {
+        int multiple = 16;
         if (bounds == null) {
-            w &= ~15; // in case it's not a multiple of 16
-            h &= ~15;
+            // in case it's not a multiple of 16
+            w = roundUp(w, multiple);
+            h = roundUp(h, multiple);
             return new Size(w, h);
         }
         int boundsWidth = bounds.getWidth();
@@ -141,8 +171,8 @@ public final class ScreenInfo {
         if (boundsWidth > scaledWidth) {
             boundsWidth = scaledWidth;
         }
-        boundsWidth &= ~15;
-        boundsHeight &= ~15;
+        boundsWidth = roundUp(boundsWidth, multiple);
+        boundsHeight = roundUp(boundsHeight, multiple);
         return new Size(boundsWidth, boundsHeight);
     }
 
